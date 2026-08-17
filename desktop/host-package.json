@@ -1,0 +1,17 @@
+{
+  "name": "dsh-desktop-host",
+  "private": true,
+  "version": "1.0.0",
+  "description": "DeepSeek Harness server runtime bundled with the desktop app",
+  "license": "MIT",
+  "allowScripts": {
+    "koffi": true,
+    "node-pty": true,
+    "protobufjs": true,
+    "@google/genai": true,
+    "@deepseek-ai/dsh-subprocess-local": true
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.1.0-rc.6"
+  }
+}

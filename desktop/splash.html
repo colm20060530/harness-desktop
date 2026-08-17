@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+  <title>Harness Desktop</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html,
+    body {
+      height: 100%;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background:
+        radial-gradient(1200px 600px at 50% -10%, rgba(63, 137, 199, 0.28), transparent 60%),
+        linear-gradient(180deg, #0c121b 0%, #0e1a28 100%);
+      font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+      color: #dce9f7;
+    }
+    .card {
+      text-align: center;
+      user-select: none;
+    }
+    .logo {
+      width: 76px;
+      height: 76px;
+      margin: 0 auto 22px;
+      border-radius: 20px;
+      background: linear-gradient(145deg, #12314b, #0c1926);
+      border: 1px solid rgba(127, 216, 245, 0.35);
+      box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.35),
+        0 18px 50px rgba(0, 0, 0, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #7fd8f5;
+      font-size: 40px;
+      font-weight: 700;
+      letter-spacing: -2px;
+    }
+    h1 {
+      font-size: 21px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      margin-bottom: 8px;
+    }
+    p {
+      font-size: 13px;
+      color: #7d94ab;
+      margin-bottom: 26px;
+    }
+    .spinner {
+      width: 34px;
+      height: 34px;
+      margin: 0 auto;
+      border-radius: 50%;
+      border: 3px solid rgba(127, 216, 245, 0.15);
+      border-top-color: #7fd8f5;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">H</div>
+    <h1>Harness 桌面版</h1>
+    <p>正在启动 DeepSeek Harness 本地服务…</p>
+    <div class="spinner"></div>
+  </div>
+</body>
+</html>

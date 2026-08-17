@@ -1,0 +1,80 @@
+{
+  "name": "harness-desktop",
+  "productName": "Harness Desktop",
+  "version": "1.0.0",
+  "description": "DeepSeek Harness 桌面版 — 内置 Aqua 玻璃主题插件（默认开启，不可卸载）",
+  "main": "main.js",
+  "author": "DSh Desktop",
+  "license": "MIT",
+  "private": true,
+  "allowScripts": {
+    "electron": true,
+    "electron-winstaller": true
+  },
+  "scripts": {
+    "prepare:resources": "powershell -ExecutionPolicy Bypass -NoProfile -File scripts/prepare-resources.ps1",
+    "start": "electron .",
+    "pack": "npm run prepare:resources && electron-builder --win nsis portable",
+    "pack:dir": "npm run prepare:resources && electron-builder --win dir"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.dsh.desktop",
+    "productName": "Harness Desktop",
+    "asar": true,
+    "compression": "normal",
+    "files": [
+      "main.js",
+      "preload.js",
+      "splash.html",
+      "error.html",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources"
+      }
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Harness Desktop",
+      "artifactName": "Harness-Desktop-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Harness-Desktop-Portable-${version}.${ext}"
+    }
+  },
+  "allowScripts": {
+    "electron@37.10.3": true,
+    "electron-winstaller@5.4.0": true
+  }
+}

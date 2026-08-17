@@ -1,0 +1,16 @@
+# build artifacts / third-party clones / test files
+scratch/
+picture/
+release/
+.tools/
+
+# desktop app
+desktop/node_modules/
+desktop/dist/
+desktop/resources/node/
+desktop/resources/host/
+desktop/*.log
+
+# npm / pnpm
+node_modules/
+*.log

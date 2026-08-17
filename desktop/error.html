@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+  <title>Harness Desktop — 启动失败</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html,
+    body {
+      height: 100%;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(180deg, #0c121b, #10151f);
+      font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+      color: #dce9f7;
+      padding: 32px;
+    }
+    .card {
+      max-width: 640px;
+      width: 100%;
+      background: rgba(18, 28, 42, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+    }
+    h1 {
+      font-size: 20px;
+      margin-bottom: 12px;
+    }
+    p {
+      font-size: 13px;
+      line-height: 1.7;
+      color: #9fb2c6;
+      margin-bottom: 10px;
+      word-break: break-all;
+    }
+    code {
+      display: block;
+      font-size: 12px;
+      color: #ffb3b3;
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-top: 8px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>DeepSeek Harness 启动失败</h1>
+    <p>本地服务未能启动，请检查下面的错误信息，或查看日志文件：</p>
+    <p id="log"></p>
+    <code id="message"></code>
+  </div>
+  <script>
+    const params = new URLSearchParams(location.search)
+    document.getElementById('message').textContent = params.get('message') || '未知错误'
+    document.getElementById('log').textContent = params.get('log') || ''
+  </script>
+</body>
+</html>
