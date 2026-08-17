@@ -4,6 +4,9 @@
 >
 > ⚠️ **非官方出品**：本项目不是 DeepSeek 官方应用，而是个人/社区基于官方开源项目二次构建的桌面封装。核心引擎 100% 来自官方开源代码，不修改官方功能，只做「桌面化 + 内置主题」的增强。
 
+![GitHub Release](https://img.shields.io/github/v/release/colm20060530/harness-desktop)
+![License](https://img.shields.io/github/license/colm20060530/harness-desktop)
+
 ![应用主界面](docs/app-screenshot.png)
 
 ## 目录
@@ -95,7 +98,7 @@ Harness Desktop 不是聊天机器人，而是**任务型 AI 智能体**。你�
 
 ### 获取安装包
 
-最新版本发布在 `release/` 目录（发布到 GitHub 时请同步上传到 **Releases** 页面，见 [版本发布](#版本发布)）：
+最新版本已发布到 GitHub Releases：[下载页面](https://github.com/colm20060530/harness-desktop/releases)。本地源码仓库中也保留了 `release/` 目录：
 
 | 文件 | 说明 |
 | --- | --- |
@@ -261,7 +264,7 @@ Harness 是 DeepSeek 官方为自家模型打造的智能体框架：框架的�
 ### 构建步骤
 
 ```powershell
-git clone https://github.com/<你的用户名>/harness-desktop.git
+git clone https://github.com/colm20060530/harness-desktop.git
 cd harness-desktop
 
 # 1. 安装构建依赖（Electron、electron-builder）
@@ -395,4 +398,4 @@ Harness Desktop（Electron 主进程）
 - 独立数据目录、插件自愈、单实例、关闭即清理；
 - 产物：安装版 + 便携版（约 165 MB / 个）。
 
-> 📌 **发布到 GitHub 的说明**：安装包约 165 MB，超过 GitHub 仓库 100 MB 的单文件限制，无法直接提交入库。请在仓库的 **Releases** 页面创建 v1.0.0 发布，将 `release/` 下的两个 exe 作为附件上传（单个附件上限 2 GB），然后在 README 中替换下载链接。
+> 📌 **发布到 GitHub 的说明**：安装包约 165 MB，超过 GitHub 仓库 100 MB 的单文件限制，无法直接提交入库。因此发布流程是：代码推送到仓库，两个 exe 作为附件上传到 **Releases** 页面（已用仓库内的 `scripts/publish.ps1` 自动化）。当前 v1.0.0 已发布：[https://github.com/colm20060530/harness-desktop/releases/tag/v1.0.0](https://github.com/colm20060530/harness-desktop/releases/tag/v1.0.0)。
