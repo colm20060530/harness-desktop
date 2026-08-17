@@ -281,6 +281,8 @@ npm start
 npm run pack
 ```
 
+> 🌏 **国内镜像**：GitHub 访问不稳定时，也可以从 Gitee 克隆：`git clone https://gitee.com/colm0530/harness-desktop.git`
+
 或使用仓库根目录的一键脚本：
 
 ```powershell
