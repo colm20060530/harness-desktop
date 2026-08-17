@@ -130,6 +130,8 @@ Harness Desktop 不是聊天机器人，而是**任务型 AI 智能体**。你�
 
 两个版本功能完全相同、共用同一份数据目录，可任选其一。
 
+> 🌏 Gitee 用户注意：Gitee Release 也同步发布了 v1.0.0，但因 Gitee 单附件限 100MB，安装包拆分为 `.part1 + .part2` 两个分卷上传，下载全部后按 Release 页说明合并（含 SHA-256 校验值）即可；GitHub Releases 提供免合并的完整版。
+
 ### 安装步骤（安装版）
 
 1. 双击 `Harness-Desktop-Setup-1.0.0.exe`；
