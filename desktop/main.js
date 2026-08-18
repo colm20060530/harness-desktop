@@ -53,6 +53,7 @@ const ARCHIVE_CHECK = process.argv.includes('--archive-check')
 const WALLPAPER_CHECK = process.argv.includes('--wallpaper-check')
 const WALLPAPER_SEED = process.argv.includes('--wallpaper-seed')
 const WALLPAPER_SEED_KIND = argAfter('--wallpaper-seed') === 'video' ? 'video' : 'image'
+const UI_CHECK = process.argv.includes('--ui-check')
 
 /** Console output that can never take the app down (e.g. EPIPE when the
  *  parent console closes while a self-check is running). */
@@ -455,7 +456,7 @@ function createWindow() {
   mainWindow.webContents.on('did-finish-load', () => {
     const current = mainWindow.webContents.getURL()
     if (current.startsWith(`http://127.0.0.1:${chosenPort}`)) {
-      injectArchivePanel()
+      injectDesktopUi()
       if (SMOKE) void runSmokeCheck()
       if (ARCHIVE_CHECK) void runArchiveCheck()
       if (WALLPAPER_CHECK && !wallpaperCheckStarted) {
@@ -465,6 +466,10 @@ function createWindow() {
       if (WALLPAPER_SEED && !wallpaperCheckStarted) {
         wallpaperCheckStarted = true
         void runWallpaperSeed()
+      }
+      if (UI_CHECK && !wallpaperCheckStarted) {
+        wallpaperCheckStarted = true
+        void runUiCheck()
       }
     }
   })
@@ -476,23 +481,29 @@ function createWindow() {
 }
 
 /**
- * Inject the built-in "恢复归档" manager into the official dsh web UI. The
- * panel talks to the bundled desktop-archive host plugin over same-origin
- * `/api/desktop-archive.*` endpoints; the official UI code is never touched.
+ * Inject the desktop-only UI into the official dsh web UI:
+ *   - archive-panel.js:  the bottom-right "恢复归档" manager (talks to the
+ *     bundled desktop-archive host plugin over same-origin
+ *     `/api/desktop-archive.*` endpoints);
+ *   - model-vision-hint.js: the DeepSeek 识图 reminder in 设置 → 模型.
+ * The official UI code is never modified.
  */
-function injectArchivePanel() {
+function injectDesktopUi() {
   if (mainWindow === null) return
   const resources = resourceRoot()
-  const panelPath = path.join(resources, 'archive-panel.js')
-  if (!fs.existsSync(panelPath)) {
-    appendLog(`archive panel script missing: ${panelPath}`)
-    return
+  const scripts = ['archive-panel.js', 'model-vision-hint.js']
+  for (const name of scripts) {
+    const scriptPath = path.join(resources, name)
+    if (!fs.existsSync(scriptPath)) {
+      appendLog(`desktop UI script missing: ${scriptPath}`)
+      continue
+    }
+    const script = fs.readFileSync(scriptPath, 'utf8')
+    mainWindow.webContents
+      .executeJavaScript(script, true)
+      .then(() => appendLog(`${name} injected`))
+      .catch((error) => appendLog(`${name} injection failed: ${error && error.message ? error.message : String(error)}`))
   }
-  const script = fs.readFileSync(panelPath, 'utf8')
-  mainWindow.webContents
-    .executeJavaScript(script, true)
-    .then(() => appendLog('archive panel injected'))
-    .catch((error) => appendLog(`archive panel injection failed: ${error && error.message ? error.message : String(error)}`))
 }
 
 async function runSmokeCheck() {
@@ -642,6 +653,54 @@ async function runWallpaperSeed() {
     app.exit(0)
   } catch (error) {
     safeLog('error', `WALLPAPER_FAILED ${error && error.stack ? error.stack : String(error)}`)
+    stopServer()
+    app.exit(1)
+  }
+}
+
+/**
+ * Self-check for the injected desktop UI: mounts a synthetic settings dialog
+ * (模型 tab with a DeepSeek provider) and verifies the vision hint card
+ * appears. Uses a throwaway userData only.
+ */
+async function runUiCheck() {
+  try {
+    const result = await mainWindow.webContents.executeJavaScript(`(async () => {
+      const waitFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      const t0 = Date.now()
+      const root = document.getElementById('root')
+      while (root === null || root.children.length === 0) {
+        if (Date.now() - t0 > 45000) break
+        await waitFor(250)
+      }
+      const dialog = document.createElement('div')
+      dialog.setAttribute('role', 'dialog')
+      const title = document.createElement('h2')
+      title.textContent = '模型'
+      const intro = document.createElement('p')
+      intro.textContent = '填入各提供方的 API 密钥即可使用其模型。DeepSeek deepseek-chat'
+      dialog.appendChild(title)
+      dialog.appendChild(intro)
+      document.body.appendChild(dialog)
+      await waitFor(1200)
+      const hint = document.getElementById('hd-vision-hint')
+      return {
+        hintFound: hint !== null,
+        hintText: hint === null ? null : hint.textContent,
+      }
+    })()`)
+    safeLog('log', `UI_RESULT ${JSON.stringify(result)}`)
+    try {
+      const dir = path.join(app.getPath('userData'), 'logs')
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'ui-check.json'), JSON.stringify(result, null, 2))
+    } catch {
+      // diagnostics only
+    }
+    stopServer()
+    app.exit(result.hintFound === true ? 0 : 1)
+  } catch (error) {
+    safeLog('error', `UI_FAILED ${error && error.stack ? error.stack : String(error)}`)
     stopServer()
     app.exit(1)
   }

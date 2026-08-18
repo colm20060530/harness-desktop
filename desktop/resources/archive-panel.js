@@ -412,6 +412,76 @@
   .${NS}-toast-error { border-color: rgba(255,140,140,.4); color: #ffdada; }
   .${NS}-toast-hide { opacity: 0; transform: translateX(-50%) translateY(8px); }
   @media (max-width: 640px) { .${NS}-fab { right: 14px; bottom: 14px; } .${NS}-panel { right: 14px; bottom: 66px; } }
+
+  /* ---- Aqua glass integration -------------------------------------------
+     When the built-in Aqua plugin is active (html[data-dsh-aqua]), the
+     archive manager consumes the plugin's live glass recipe: the frosted
+     fill rides --dsh-aqua-glass-card-light/dark, the blur rides
+     --dsh-aqua-blur, and hover/selection glows use --dsh-aqua-spot-color.
+     Adjusting 模糊度/磨砂度 in 设置 → 通用设置 → 外观 changes this panel
+     too. Fallbacks keep the panel usable even if the plugin is off. */
+  html[data-dsh-aqua] .${NS}-fab,
+  html[data-dsh-aqua] .${NS}-panel,
+  html[data-dsh-aqua] .${NS}-toast,
+  html[data-dsh-aqua] .${NS}-modal-card {
+    background: color-mix(in srgb, #ffffff calc(62% * var(--dsh-aqua-surface-frost, 1.2)), transparent);
+    -webkit-backdrop-filter: blur(var(--dsh-aqua-blur, 20px)) saturate(150%);
+    backdrop-filter: blur(var(--dsh-aqua-blur, 20px)) saturate(150%);
+    border-color: rgba(19, 45, 83, 0.26);
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.55), 0 12px 36px rgba(19, 45, 83, 0.18);
+  }
+  html[data-dsh-aqua] body[data-ds-dark-theme] .${NS}-fab,
+  html[data-dsh-aqua] body[data-ds-dark-theme] .${NS}-panel,
+  html[data-dsh-aqua] body[data-ds-dark-theme] .${NS}-toast,
+  html[data-dsh-aqua] body[data-ds-dark-theme] .${NS}-modal-card {
+    background: color-mix(in srgb, #232a36 calc(64% * var(--dsh-aqua-surface-frost, 1.2)), transparent);
+    border-color: rgba(148, 180, 220, 0.32);
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.08), 0 12px 36px rgba(2, 6, 14, 0.5);
+  }
+  html[data-dsh-aqua] .${NS}-row {
+    background: color-mix(in srgb, #ffffff calc(30% * var(--dsh-aqua-frost, 1)), transparent);
+    border-color: rgba(19, 45, 83, 0.14);
+  }
+  html[data-dsh-aqua] body[data-ds-dark-theme] .${NS}-row {
+    background: color-mix(in srgb, #232a36 calc(32% * var(--dsh-aqua-frost, 1)), transparent);
+    border-color: rgba(148, 180, 220, 0.16);
+  }
+  html[data-dsh-aqua] .${NS}-row:hover {
+    background: color-mix(in srgb, #ffffff calc(42% * var(--dsh-aqua-frost, 1)), transparent);
+  }
+  html[data-dsh-aqua] body[data-ds-dark-theme] .${NS}-row:hover {
+    background: color-mix(in srgb, #2c3442 calc(44% * var(--dsh-aqua-frost, 1)), transparent);
+  }
+  html[data-dsh-aqua] .${NS}-row.${NS}-selected {
+    border-color: color-mix(in srgb, #6e9be8 72%, transparent);
+    box-shadow: 0 0 16px var(--dsh-aqua-spot-color, rgba(110, 155, 232, 0.18));
+  }
+  html[data-dsh-aqua] .${NS}-fab:hover {
+    background: color-mix(in srgb, #ffffff calc(76% * var(--dsh-aqua-surface-frost, 1.2)), transparent);
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.6), 0 0 0 1px color-mix(in srgb, #6e9be8 55%, transparent), 0 16px 42px rgba(19, 45, 83, 0.22);
+  }
+  html[data-dsh-aqua] body[data-ds-dark-theme] .${NS}-fab:hover {
+    background: color-mix(in srgb, #2f3846 calc(76% * var(--dsh-aqua-surface-frost, 1.2)), transparent);
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.1), 0 0 0 1px rgba(148, 180, 220, 0.5), 0 16px 42px rgba(2, 6, 14, 0.6);
+  }
+  html[data-dsh-aqua] body:not([data-ds-dark-theme]) .${NS}-fab,
+  html[data-dsh-aqua] body:not([data-ds-dark-theme]) .${NS}-title,
+  html[data-dsh-aqua] body:not([data-ds-dark-theme]) .${NS}-row-title,
+  html[data-dsh-aqua] body:not([data-ds-dark-theme]) .${NS}-toast { color: #1d3556; }
+  html[data-dsh-aqua] body:not([data-ds-dark-theme]) .${NS}-count,
+  html[data-dsh-aqua] body:not([data-ds-dark-theme]) .${NS}-row-meta,
+  html[data-dsh-aqua] body:not([data-ds-dark-theme]) .${NS}-hint,
+  html[data-dsh-aqua] body:not([data-ds-dark-theme]) .${NS}-select-all-label { color: #5d7696; }
+  html[data-dsh-aqua] .${NS}-close { background: rgba(110, 155, 232, 0.14); }
+  html[data-dsh-aqua] body:not([data-ds-dark-theme]) .${NS}-close { color: #2d4a70; }
+  html[data-dsh-aqua] body[data-ds-dark-theme] .${NS}-close { color: #9fc3e4; }
+  html[data-dsh-aqua] .${NS}-btn-soft { color: #4a80c8; border-color: rgba(110, 155, 232, 0.3); }
+  html[data-dsh-aqua] body[data-ds-dark-theme] .${NS}-btn-soft { color: #8fd0ff; }
+  html[data-dsh-aqua] .${NS}-btn-soft:hover:not(:disabled) { color: #2b5b9a; }
+  html[data-dsh-aqua] body[data-ds-dark-theme] .${NS}-btn-soft:hover:not(:disabled) { color: #c7e8ff; }
+  html[data-dsh-aqua] .${NS}-btn-soft-danger { color: #c44545; }
+  html[data-dsh-aqua] body[data-ds-dark-theme] .${NS}-btn-soft-danger { color: #ff9d9d; }
+  html[data-dsh-aqua] body[data-ds-dark-theme] .${NS}-modal-card { background: color-mix(in srgb, #241f31 calc(72% * var(--dsh-aqua-surface-frost, 1.2)), transparent); }
   `
   const styleEl = el('style')
   styleEl.id = `${NS}-style`
