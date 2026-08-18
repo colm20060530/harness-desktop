@@ -4,7 +4,7 @@
 #   1. 检查 gh 登录状态
 #   2. 初始化/提交本地 git 仓库
 #   3. 创建 GitHub 仓库并推送
-#   4. 创建 v1.0.0 Release 并上传安装版 + 便携版（release/ 下的两个 exe）
+#   4. 创建 Release 并上传安装版（release/ 下的 exe）
 #
 # 前置条件（只做一次）：
 #   winget install GitHub.cli          # 安装 gh
@@ -22,7 +22,7 @@ param(
     [ValidateSet('public', 'private')]
     [string]$Visibility = 'public',
 
-    [string]$Tag = 'v1.0.0'
+    [string]$Tag = 'v2.0.0'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,7 +54,7 @@ try {
     git config user.email "$Owner@users.noreply.github.com"
     git add -A
     if (-not [string]::IsNullOrWhiteSpace((git status --porcelain))) {
-        git commit -m "chore: prepare v1.0.0 release" | Out-Null
+        git commit -m "chore: prepare $Tag release" | Out-Null
     }
 
     Write-Host "[3/4] 创建仓库 $Owner/$Repo ($Visibility) 并推送..." -ForegroundColor Cyan
@@ -65,19 +65,17 @@ try {
     if ($LASTEXITCODE -ne 0) { throw '仓库创建/推送失败' }
 
     Write-Host "[4/4] 创建 Release $Tag 并上传安装包..." -ForegroundColor Cyan
-    $setup    = Join-Path $root 'release\Harness-Desktop-Setup-1.0.0.exe'
-    $portable = Join-Path $root 'release\Harness-Desktop-Portable-1.0.0.exe'
-    if (-not (Test-Path $setup) -or -not (Test-Path $portable)) {
-        throw "release 产物缺失，请确认 release\ 下存在两个 exe"
+    $setup    = Join-Path $root "release\Harness-Desktop-Setup-$($Tag.Substring(1)).exe"
+    if (-not (Test-Path $setup)) {
+        throw "release 产物缺失，请确认 release\ 下存在安装包"
     }
-    gh release create $Tag $setup $portable `
+    gh release create $Tag $setup `
         --title "Harness Desktop $Tag" `
-        --notes "## Harness Desktop v1.0.0
+        --notes "## Harness Desktop $Tag
 
 基于官方 deepseek-harness 全新构建的 Windows 桌面版，内置 Aqua 玻璃拟态 UI（默认开启、不可卸载）。
 
-- 安装版：\`Harness-Desktop-Setup-1.0.0.exe\`（向导安装 + 快捷方式 + 可卸载）
-- 便携版：\`Harness-Desktop-Portable-1.0.0.exe\`（免安装，双击即用）
+- 安装版：\`Harness-Desktop-Setup-$($Tag.Substring(1)).exe\`（向导安装 + 快捷方式 + 可卸载）
 
 详见 README.md。"
     if ($LASTEXITCODE -ne 0) { throw 'Release 创建失败' }

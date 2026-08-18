@@ -1,7 +1,7 @@
 {
   "name": "harness-desktop",
   "productName": "Harness Desktop",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "DeepSeek Harness 桌面版 — 内置 Aqua 玻璃主题插件（默认开启，不可卸载）",
   "main": "main.js",
   "author": "DSh Desktop",
@@ -14,7 +14,7 @@
   "scripts": {
     "prepare:resources": "powershell -ExecutionPolicy Bypass -NoProfile -File scripts/prepare-resources.ps1",
     "start": "electron .",
-    "pack": "npm run prepare:resources && electron-builder --win nsis portable",
+    "pack": "npm run prepare:resources && electron-builder --win nsis",
     "pack:dir": "npm run prepare:resources && electron-builder --win dir"
   },
   "devDependencies": {
@@ -50,12 +50,6 @@
           "arch": [
             "x64"
           ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
         }
       ],
       "icon": "build/icon.png"
@@ -69,9 +63,6 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Harness Desktop",
       "artifactName": "Harness-Desktop-Setup-${version}.${ext}"
-    },
-    "portable": {
-      "artifactName": "Harness-Desktop-Portable-${version}.${ext}"
     }
   },
   "allowScripts": {

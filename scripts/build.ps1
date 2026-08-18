@@ -28,7 +28,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'npm install failed' }
     }
     & (Join-Path $desktop 'scripts\make-icon.ps1')
-    npx electron-builder --win nsis portable
+    npx electron-builder --win nsis
     if ($LASTEXITCODE -ne 0) { throw 'electron-builder failed' }
 } finally {
     Pop-Location

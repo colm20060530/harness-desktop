@@ -522,7 +522,12 @@ function injectDesktopUi() {
     appendLog(`aqua overrides missing: ${cssPath}`)
   }
 
-  const scripts = ['archive-panel.js', 'model-vision-hint.js', 'defaults-seed.js']
+  // Self-checks other than --defaults-check use a throwaway profile; skip
+  // the first-run defaults seed so its one-time page reload cannot interrupt
+  // an in-flight check.
+  const skipDefaultsSeed = (SMOKE || ARCHIVE_CHECK || WALLPAPER_CHECK || WALLPAPER_SEED || UI_CHECK) && !DEFAULTS_CHECK
+  const scripts = ['archive-panel.js', 'model-vision-hint.js']
+  if (!skipDefaultsSeed) scripts.push('defaults-seed.js')
   for (const name of scripts) {
     const scriptPath = path.join(resources, name)
     if (!fs.existsSync(scriptPath)) {
@@ -859,7 +864,7 @@ async function runDefaultsCheck() {
       const t0 = Date.now()
       const markerOk = () => {
         try {
-          return localStorage.getItem('hd.defaults.v2') === '1'
+          return localStorage.getItem('hd.defaults.v3') === '1'
         } catch {
           return false
         }

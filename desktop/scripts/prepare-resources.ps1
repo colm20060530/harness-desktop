@@ -129,6 +129,13 @@ if (Test-Path (Join-Path $localPlugin 'lib\client.js')) {
         throw 'downloaded plugin has no prebuilt lib/client.js'
     }
     Copy-Item (Join-Path $inner.FullName 'lib') (Join-Path $pluginDest 'lib') -Recurse -Force
+    # Upstream ships a redundant nested lib/lib copy (same entry files as the
+    # package root); drop it to keep the bundled plugin minimal.
+    $nestedLib = Join-Path $pluginDest 'lib\lib'
+    if (Test-Path $nestedLib) {
+        Remove-Item $nestedLib -Recurse -Force
+        Write-Host '  removed redundant nested lib/lib copy' -ForegroundColor DarkGray
+    }
     Copy-Item (Join-Path $inner.FullName 'package.json') $pluginDest -Force
     if (Test-Path (Join-Path $inner.FullName 'LICENSE')) {
         Copy-Item (Join-Path $inner.FullName 'LICENSE') $pluginDest -Force
@@ -139,7 +146,7 @@ if (Test-Path (Join-Path $localPlugin 'lib\client.js')) {
 # freshly downloaded bundle behaves identically to the committed one.
 $nodeExeForPatch = Join-Path $resources 'node\node.exe'
 $patchScript = Join-Path $desktopRoot 'scripts\patch-aqua-wallpaper.mjs'
-if (Test-Path $nodeExeForPatch -and (Test-Path (Join-Path $pluginDest 'lib\client.js'))) {
+if ((Test-Path $nodeExeForPatch) -and (Test-Path (Join-Path $pluginDest 'lib\client.js'))) {
     & $nodeExeForPatch $patchScript (Join-Path $pluginDest 'lib\client.js')
     if ($LASTEXITCODE -ne 0) { throw "aqua wallpaper patch failed (exit $LASTEXITCODE)" }
 } else {
