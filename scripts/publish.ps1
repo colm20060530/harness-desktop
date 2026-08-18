@@ -22,7 +22,7 @@ param(
     [ValidateSet('public', 'private')]
     [string]$Visibility = 'public',
 
-    [string]$Tag = 'v2.0.0'
+    [string]$Tag = 'v2.0.1'
 )
 
 $ErrorActionPreference = 'Stop'

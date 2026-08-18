@@ -255,7 +255,11 @@ function pidsOnPort(port) {
 
 /**
  * Whether a PID is one of this app's own orphaned dsh servers: its command
- * line must reference the bundled dsh bin and the same port.
+ * line must reference the bundled dsh bin, the same port, and the desktop
+ * patch overlay (desktop.patch.yml) that only Harness Desktop passes. This
+ * keeps the official `dsh web` server (which also uses port 3080 by default
+ * or via an explicit --port flag) from ever being mistaken for our own
+ * leftover process and terminated.
  */
 function isOwnServerPid(pid, port) {
   try {
@@ -266,7 +270,11 @@ function isOwnServerPid(pid, port) {
       timeout: 8000,
     })
     const line = String(out.stdout || '')
-    return line.includes('@deepseek-ai\\dsh\\lib\\bin.js') && line.includes(`--port ${port}`)
+    return (
+      line.includes('@deepseek-ai\\dsh\\lib\\bin.js') &&
+      line.includes(`--port ${port}`) &&
+      line.includes('desktop.patch.yml')
+    )
   } catch {
     return false
   }

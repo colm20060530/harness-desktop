@@ -133,13 +133,13 @@ Harness Desktop 不是简单的聊天机器人，而是任务型 AI 智能体，
 
 | 文件 | 说明 |
 | --- | --- |
-| `Harness-Desktop-Setup-2.0.0.exe` | 安装版：向导安装、创建桌面/开始菜单快捷方式、可在「应用和功能」中卸载 |
+| `Harness-Desktop-Setup-2.0.1.exe` | 安装版：向导安装、创建桌面/开始菜单快捷方式、可在「应用和功能」中卸载 |
 
 Gitee 用户注意：Gitee Release 同步发布（[https://gitee.com/colm0530/harness-desktop/releases](https://gitee.com/colm0530/harness-desktop/releases)）。因 Gitee 单附件大小限制，安装包拆分为多个分卷上传，请下载全部分卷后按 Release 页说明合并（附 SHA-256 校验值）；GitHub Releases 提供免合并的完整版。
 
 ### 安装步骤
 
-1. 双击 `Harness-Desktop-Setup-2.0.0.exe`；
+1. 双击 `Harness-Desktop-Setup-2.0.1.exe`；
 2. 若出现 SmartScreen「Windows 已保护你的电脑」提示，点击「更多信息 → 仍要运行」（软件暂未做代码签名，属正常提示，见 [FAQ Q1](#常见问题-faq)）；
 3. 按向导选择安装目录（默认即可），勾选快捷方式；
 4. 点击安装并完成。
@@ -147,7 +147,7 @@ Gitee 用户注意：Gitee Release 同步发布（[https://gitee.com/colm0530/ha
 ### 静默安装（可选）
 
 ```powershell
-Harness-Desktop-Setup-2.0.0.exe /S /D=D:\HarnessDesktop
+Harness-Desktop-Setup-2.0.1.exe /S /D=D:\HarnessDesktop
 ```
 
 注意：`/D=` 后跟安装目录，且必须是命令行**最后一个参数**。
@@ -533,6 +533,14 @@ my-plugin/
 ---
 
 ## 版本发布
+
+### v2.0.1（2026-08-18）
+
+修复：优化端口占用识别逻辑。此前若用户以 `dsh web --port 3080` 显式指定端口运行官方 Web UI，桌面版可能将其误判为自身遗留进程并关闭；本次更新后，只有命令行中同时包含桌面版特有补丁标记（`desktop.patch.yml`）的进程才会被回收，官方 `dsh web` 无论以何种方式启动都不会被影响。
+
+- 安装包：`Harness-Desktop-Setup-2.0.1.exe`（约 195 MB，含内置视频壁纸）；
+- 发布地址：<https://github.com/colm20060530/harness-desktop/releases/tag/v2.0.1>；
+- Gitee 同步发布：<https://gitee.com/colm0530/harness-desktop/releases>（分卷上传，见 Release 页说明）。
 
 ### v2.0.0（2026-08-18）
 
