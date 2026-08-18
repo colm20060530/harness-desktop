@@ -7,6 +7,10 @@ Harness Desktop 是一个全新独立构建的 Windows 桌面客户端：它以 
 [![GitHub Release](https://img.shields.io/github/v/release/colm20060530/harness-desktop)](https://github.com/colm20060530/harness-desktop/releases)
 [![License](https://img.shields.io/github/license/colm20060530/harness-desktop)](LICENSE)
 
+![GitHub Release](https://img.shields.io/github/v/release/colm20060530/harness-desktop)
+![Gitee Release](https://gitee.com/colm0530/harness-desktop)
+![License](https://img.shields.io/github/license/colm20060530/harness-desktop)
+
 ![应用主界面](docs/app-screenshot.png)
 
 ## 目录
@@ -481,6 +485,66 @@ my-plugin/
 
 ---
 
+## 自定义与打造你的专属桌面端
+
+Harness Desktop 的底层是插件化架构（Cordis）——**一切皆插件**。你不需要会写 Electron，甚至不需要装开发环境，就可以在本应用内直接让 AI 帮你完成定制。
+
+### 第一步：在应用内直接自定义（零代码）
+
+打开输入框，用自然语言下指令，AI 会帮你完成：
+
+| 你想做什么 | 可以这样说 |
+| --- | --- |
+| 安装功能插件 | 「帮我安装 XX 插件」「看看当前装了哪些插件」 |
+| 更换界面主题 | 「把界面换成深色主题」「主题改成跟随系统」 |
+| 自定义命令 | 「帮我写一个脚本，一键整理工作目录」 |
+| 封装自定义工具 | 「把我的常用操作封装成一个自定义工具」 |
+| 编写技能（Skill） | 「帮我创建一个技能，专门用来处理 XX 任务」 |
+
+AI 会在你的工作目录里生成代码/脚本，并通过 `dsh plugin` 与 `cordis.patch.yml` 注册到应用中；涉及安装软件包或修改配置时会先向你申请权限。
+
+### 第二步：写一个属于你自己的插件（就像内置的 Aqua）
+
+本项目内置的 Aqua 玻璃主题就是一个标准 dsh 插件。你可以让 AI 照着它写一个自己的插件，例如：
+
+```text
+帮我创建一个 dsh 插件，包名叫 @我的名字/dsh-client-ui-xxx，
+给聊天区加一个 XXX 功能/效果，参照 Aqua 插件的结构。
+```
+
+一个 dsh 客户端插件的最小结构（AI 会帮你生成）：
+
+```text
+my-plugin/
+├── package.json        # 声明 dsh.client.inject 依赖与入口
+├── lib/client.js       # 前端插件 bundle（UI 组件、样式、逻辑）
+└── 注册到 cordis.patch.yml：
+    - insert:
+        - id: my-plugin
+          name: '@我的名字/my-plugin'
+```
+
+### 第三步：打造你自己的专属桌面端（本项目的诞生方式）
+
+本项目就是这样从官方 harness 一步步做出来的。想拥有一个完全属于你自己的桌面端，只需按同样流程：
+
+1. **Fork 本项目**（或直接克隆）：`git clone https://github.com/colm20060530/harness-desktop.git`
+2. **换成你的名字与图标**：改 `desktop/package.json` 里的 `productName`（应用名）与 `build/icon.png`（图标）；
+3. **换成你的插件**：把上一步写好的插件放进 `desktop/resources/plugins\`，并修改 `desktop/resources/aqua.patch.yml` 里的注册信息；
+4. **设置你的默认模型**：编辑数据目录 `dsh-home\settings.yaml` 的 `agent-default-model`，或首次启动后在设置里选择；
+5. **重新打包成安装包**（电脑上装 Node.js 后运行）：
+
+   ```powershell
+   .\scripts\build.ps1
+   ```
+
+   产物在 `desktop\dist\`：一个安装版 + 一个便携版，直接发给朋友就能用；
+6. **发布到 GitHub / Gitee**：用 `.\scripts\publish.ps1` 一键建仓、推代码、传安装包。
+
+> 💡 这些步骤中除了打包发布需要一台 Windows 电脑外，**插件编写、配置修改、打包命令**都可以直接在本应用里让 AI 代劳——把你的需求说清楚，AI 会像当初构建这个项目一样，帮你打造一个"你的名字、你的皮肤、你的功能"的专属桌面端。
+
+---
+
 ## 常见问题 FAQ
 
 **Q1：安装/运行时出现 SmartScreen 警告？**
@@ -514,6 +578,10 @@ my-plugin/
 **Q8：为什么不用官方 Web UI 而要这个桌面版？**
 
 桌面版 = 官方完整引擎 + 桌面窗口体验 + 内置 Aqua 玻璃拟态 UI。如果只想要原版界面，直接用官方 `npx @deepseek-ai/dsh web` 即可；想要「官方体验 + 特色皮肤 + 免环境安装」，用本应用。
+
+**Q9：重装后为什么模型配置和聊天记录全没了？**
+
+请先确认卸载方式：若使用 Geek Uninstaller 等深度卸载工具并勾选了删除残留文件，会连同 `AppData\Roaming\Harness Desktop` 数据目录一起删除，重装后需要重新配置。三种解决办法见[数据与配置（含备份）](#数据与配置含备份)一节。
 
 **Q9：重装后为什么模型配置和聊天记录全没了？**
 
