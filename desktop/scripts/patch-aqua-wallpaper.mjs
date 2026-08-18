@@ -110,7 +110,7 @@ function patchDefaults(source) {
   )
   source = source.replaceAll(
     '\t\t\tvideoBlur: 6,\n\t\t\tvideoBrightness: 45',
-    '\t\t\tvideoBlur: 4.5,\n\t\t\tvideoBrightness: 20',
+    '\t\t\tvideoBlur: 6,\n\t\t\tvideoBrightness: 20',
   )
 
   // Settings-row store initial state (5 tabs).
@@ -122,7 +122,7 @@ function patchDefaults(source) {
   )
   source = source.replaceAll(
     '\t\t\t\t\tvideoBlur: 6,\n\t\t\t\t\tvideoBrightness: 45,',
-    '\t\t\t\t\tvideoBlur: 4.5,\n\t\t\t\t\tvideoBrightness: 20,',
+    '\t\t\t\t\tvideoBlur: 6,\n\t\t\t\t\tvideoBrightness: 20,',
   )
 
   source = source.replace(
@@ -146,6 +146,14 @@ function patchVideoBubble(source) {
   source = source.replace(light, 'html[data-dsh-float][data-dsh-aqua-wallpaper][data-dsh-aqua-media=video] [class*=bubble]{background:rgba(255,255,255,0.42)')
   source = source.replace(dark, 'html[data-dsh-float][data-dsh-aqua-wallpaper][data-dsh-aqua-media=video] body[data-ds-dark-theme] [class*=bubble]{background:rgba(13,18,25,0.5)')
   return source
+}
+
+/**
+ * 默认视频模糊度：从早期的 4.5 调整为 6（用户最终偏好）。已打过补丁的
+ * 包（含 4.5）会在这里更新；全新包原本就是 6，无需改动。
+ */
+function patchVideoBlurDefault(source) {
+  return source.replaceAll('videoBlur: 4.5', 'videoBlur: 6')
 }
 
 const target = process.argv[2]
@@ -174,6 +182,7 @@ if (!source.includes(marker)) {
 // patch (the marker is set, but the defaults may be from an older build).
 source = patchDefaults(source)
 source = patchVideoBubble(source)
+source = patchVideoBlurDefault(source)
 if (source !== before) {
   writeFileSync(file, source)
   console.log(`patched: ${file}`)

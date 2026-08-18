@@ -799,7 +799,7 @@ window.__ModuleLoader__.load({
 					press: true,
 					wallpaperBlur: 0,
 					wallpaperFrost: 0,
-					videoBlur: 4.5,
+					videoBlur: 6,
 					videoBrightness: 20,
 					revision: -1
 				}),
@@ -3029,7 +3029,7 @@ void main() {
 			fluidDepth: 25,
 			wallpaperBlur: 0,
 			wallpaperFrost: 0,
-			videoBlur: 4.5,
+			videoBlur: 6,
 			videoBrightness: 20
 		};
 		/** Numeric knob keys and their localStorage names. */

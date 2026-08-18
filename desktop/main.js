@@ -922,7 +922,7 @@ async function runDefaultsCheck() {
       result.seeded === true
       && result.blur === '16'
       && result.frost === '13'
-      && result.videoBlur === '4.5'
+      && result.videoBlur === '6'
       && result.videoBrightness === '20'
       && result.background === 'wallpaper'
       && String(result.wallpaper).startsWith('idb:default-video')

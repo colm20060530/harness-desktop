@@ -2,7 +2,7 @@
  * Harness Desktop — 首次启动默认配置种子（渲染进程侧）。
  *
  * 打开应用的默认观感是「深色 + 内置云朵兽耳视频壁纸」：
- *   玻璃模糊 16、磨砂 13、视频模糊 4.5、视频亮度 20、背景=视频壁纸。
+ *   玻璃模糊 16、磨砂 13、视频模糊 6、视频亮度 20、背景=视频壁纸。
  *
  * 流程（每个用户目录只执行一次）：
  *   1. 从内置服务端接口拉取捆绑视频，写入 Aqua 插件的 IndexedDB 存储
@@ -14,7 +14,7 @@
 (function seedDefaults() {
   'use strict'
 
-  const MARK = 'hd.defaults.v2'
+  const MARK = 'hd.defaults.v3'
   const BLOB_KEY = 'default-video'
   const DB_NAME = 'dsh-aqua-media'
   const STORE = 'wallpaper'
@@ -49,7 +49,7 @@
       // 2. Aqua 默认参数。
       localStorage.setItem('dsh.ui-aqua.blur', '16')
       localStorage.setItem('dsh.ui-aqua.frost', '13')
-      localStorage.setItem('dsh.ui-aqua.videoBlur', '4.5')
+      localStorage.setItem('dsh.ui-aqua.videoBlur', '6')
       localStorage.setItem('dsh.ui-aqua.videoBrightness', '20')
       localStorage.setItem('dsh.ui-aqua.background', 'wallpaper')
       localStorage.setItem('dsh.ui-aqua.wallpaper', 'idb:default-video')
