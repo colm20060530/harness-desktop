@@ -15,7 +15,7 @@
  * surfaces (no direct file edits of live storage), and sessions that are
  * currently open in the server are refused for deletion.
  */
-import { readFileSync } from 'node:fs'
+import { createReadStream, readFileSync, statSync } from 'node:fs'
 import { rm, readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 
@@ -283,6 +283,32 @@ export function apply(ctx) {
       respond(res, 200, { ok: true, deleted })
     } catch (error) {
       fail(res, error)
+    }
+  })
+
+  // Serve the bundled default wallpaper video (seeded into IndexedDB on the
+  // renderer's first launch). The path is injected by the desktop launcher
+  // via DSH_DESKTOP_ASSETS (the packaged resources directory).
+  registerRoute(ctx, '/api/desktop-assets.wallpaper', (req, res) => {
+    try {
+      const assets = process.env.DSH_DESKTOP_ASSETS
+      if (!assets) throw new Error('DSH_DESKTOP_ASSETS is not set')
+      const file = path.join(assets, 'wallpaper', 'default.mp4')
+      const info = statSync(file)
+      res.writeHead(200, {
+        'content-type': 'video/mp4',
+        'content-length': info.size,
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+      })
+      const stream = createReadStream(file)
+      stream.on('error', () => {
+        res.destroy()
+      })
+      stream.pipe(res)
+    } catch (error) {
+      res.writeHead(404, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'wallpaper asset missing' }))
     }
   })
 }

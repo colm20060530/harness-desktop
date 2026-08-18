@@ -89,6 +89,49 @@ function patchSlotKey(source) {
   return source.replace(original, replacement)
 }
 
+/**
+ * Harness Desktop default configuration: deep-sea dark default with the
+ * bundled cloud wallpaper video and the tuned glass recipe:
+ *   blur 16, frost 13, video blur 4.5, video brightness 20,
+ *   background = wallpaper (idb:default-video).
+ * Applied to both the layer's SETTINGS_DEFAULTS and the settings-row store
+ * initial state, so a fresh profile boots straight into the branded look
+ * before any localStorage exists.
+ */
+function patchDefaults(source) {
+  if (source.includes('idb:default-video')) return source
+
+  // SETTINGS_DEFAULTS (3 tabs).
+  source = source.replaceAll('\t\t\tblur: 20,\n', '\t\t\tblur: 16,\n')
+  source = source.replaceAll('\t\t\tfrost: 7,\n', '\t\t\tfrost: 13,\n')
+  source = source.replaceAll(
+    '\t\t\tbackground: "fluid",\n\t\t\twallpaper: "",',
+    '\t\t\tbackground: "wallpaper",\n\t\t\twallpaper: "idb:default-video",',
+  )
+  source = source.replaceAll(
+    '\t\t\tvideoBlur: 6,\n\t\t\tvideoBrightness: 45',
+    '\t\t\tvideoBlur: 4.5,\n\t\t\tvideoBrightness: 20',
+  )
+
+  // Settings-row store initial state (5 tabs).
+  source = source.replaceAll('\t\t\t\t\tblur: 20,\n', '\t\t\t\t\tblur: 16,\n')
+  source = source.replaceAll('\t\t\t\t\tfrost: 7,\n', '\t\t\t\t\tfrost: 13,\n')
+  source = source.replaceAll(
+    '\t\t\t\t\tbackground: "fluid",\n\t\t\t\t\twallpaper: "",',
+    '\t\t\t\t\tbackground: "wallpaper",\n\t\t\t\t\twallpaper: "idb:default-video",',
+  )
+  source = source.replaceAll(
+    '\t\t\t\t\tvideoBlur: 6,\n\t\t\t\t\tvideoBrightness: 45,',
+    '\t\t\t\t\tvideoBlur: 4.5,\n\t\t\t\t\tvideoBrightness: 20,',
+  )
+
+  source = source.replace(
+    'const SETTINGS_DEFAULTS = {',
+    '/* Harness Desktop defaults: dark video wallpaper */\n\t\tconst SETTINGS_DEFAULTS = {',
+  )
+  return source
+}
+
 const target = process.argv[2]
 if (!target) {
   console.error('usage: node patch-aqua-wallpaper.mjs <path-to-lib/client.js>')
@@ -111,6 +154,9 @@ if (!source.includes(marker)) {
     '\t\t\t\t\t} else if (wallpaper.startsWith("fsa:")) if (this.videoBlobId === wallpaper && this.videoObjectUrl !== void 0) {} else loadVideoHandle().then(async (handle) => {\n\t\t\t\t\t\t/* Harness Desktop patch: migrate legacy fsa wallpaper into idb blob */\n',
   )
 }
+// Defaults are applied even to bundles that already carry the wallpaper
+// patch (the marker is set, but the defaults may be from an older build).
+source = patchDefaults(source)
 if (source !== before) {
   writeFileSync(file, source)
   console.log(`patched: ${file}`)

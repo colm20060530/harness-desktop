@@ -54,6 +54,7 @@ const WALLPAPER_CHECK = process.argv.includes('--wallpaper-check')
 const WALLPAPER_SEED = process.argv.includes('--wallpaper-seed')
 const WALLPAPER_SEED_KIND = argAfter('--wallpaper-seed') === 'video' ? 'video' : 'image'
 const UI_CHECK = process.argv.includes('--ui-check')
+const DEFAULTS_CHECK = process.argv.includes('--defaults-check')
 
 /** Console output that can never take the app down (e.g. EPIPE when the
  *  parent console closes while a self-check is running). */
@@ -85,6 +86,7 @@ let serverChild = null
 let chosenPort = 0
 let dshHome = ''
 let wallpaperCheckStarted = false
+let defaultsCheckStarted = false
 
 // ---- single instance -------------------------------------------------------
 
@@ -362,7 +364,7 @@ async function startServer(resources) {
 
   serverChild = spawn(nodeExe, [binPath, ...args], {
     cwd: hostDir,
-    env: { ...process.env, DSH_HOME: dshHome },
+    env: { ...process.env, DSH_HOME: dshHome, DSH_DESKTOP_ASSETS: resources },
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -471,6 +473,12 @@ function createWindow() {
         wallpaperCheckStarted = true
         void runUiCheck()
       }
+      if (DEFAULTS_CHECK && !defaultsCheckStarted) {
+        defaultsCheckStarted = true
+        // The first launch seeds defaults and reloads the page; give the
+        // post-reload page time to settle before verifying.
+        setTimeout(() => void runDefaultsCheck(), 6000)
+      }
     }
   })
 
@@ -514,7 +522,7 @@ function injectDesktopUi() {
     appendLog(`aqua overrides missing: ${cssPath}`)
   }
 
-  const scripts = ['archive-panel.js', 'model-vision-hint.js']
+  const scripts = ['archive-panel.js', 'model-vision-hint.js', 'defaults-seed.js']
   for (const name of scripts) {
     const scriptPath = path.join(resources, name)
     if (!fs.existsSync(scriptPath)) {
@@ -757,6 +765,98 @@ async function runUiCheck() {
     app.exit(result.hintFound === true ? 0 : 1)
   } catch (error) {
     safeLog('error', `UI_FAILED ${error && error.stack ? error.stack : String(error)}`)
+    stopServer()
+    app.exit(1)
+  }
+}
+
+/**
+ * Self-check for the first-run defaults (dark theme + bundled video
+ * wallpaper + tuned glass recipe). Runs after the seed's one-time reload
+ * and verifies the persisted values, the IndexedDB blob, the mounted video
+ * wallpaper, and the resolved dark scheme.
+ */
+async function runDefaultsCheck() {
+  try {
+    const result = await mainWindow.webContents.executeJavaScript(`(async () => {
+      const waitFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      const t0 = Date.now()
+      const markerOk = () => {
+        try {
+          return localStorage.getItem('hd.defaults.v2') === '1'
+        } catch {
+          return false
+        }
+      }
+      while (!markerOk()) {
+        if (Date.now() - t0 > 45000) break
+        await waitFor(300)
+      }
+      const read = (key, fallback) => {
+        try {
+          return localStorage.getItem(key) ?? fallback
+        } catch {
+          return fallback
+        }
+      }
+      const blobExists = await new Promise((resolve) => {
+        try {
+          const request = indexedDB.open('dsh-aqua-media', 1)
+          request.onsuccess = () => {
+            const db = request.result
+            try {
+              const tx = db.transaction('wallpaper', 'readonly')
+              const get = tx.objectStore('wallpaper').get('default-video')
+              get.onsuccess = () => resolve(get.result !== undefined && get.result !== null)
+              get.onerror = () => resolve(false)
+            } catch {
+              resolve(false)
+            }
+          }
+          request.onerror = () => resolve(false)
+        } catch {
+          resolve(false)
+        }
+      })
+      const video = document.querySelector('[data-dsh-aqua-wallpaper-video]')
+      const videoSrc = video === null ? null : String(video.getAttribute('src')).slice(0, 24)
+      return {
+        seeded: markerOk(),
+        blur: read('dsh.ui-aqua.blur'),
+        frost: read('dsh.ui-aqua.frost'),
+        videoBlur: read('dsh.ui-aqua.videoBlur'),
+        videoBrightness: read('dsh.ui-aqua.videoBrightness'),
+        background: read('dsh.ui-aqua.background'),
+        wallpaper: read('dsh.ui-aqua.wallpaper'),
+        darkScheme: document.body.hasAttribute('data-ds-dark-theme'),
+        blobExists,
+        videoSrc,
+        aquaActive: document.documentElement.getAttribute('data-dsh-aqua') !== null,
+      }
+    })()`)
+    safeLog('log', `DEFAULTS_RESULT ${JSON.stringify(result)}`)
+    try {
+      const dir = path.join(app.getPath('userData'), 'logs')
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'defaults-check.json'), JSON.stringify(result, null, 2))
+    } catch {
+      // diagnostics only
+    }
+    const passed =
+      result.seeded === true
+      && result.blur === '16'
+      && result.frost === '13'
+      && result.videoBlur === '4.5'
+      && result.videoBrightness === '20'
+      && result.background === 'wallpaper'
+      && String(result.wallpaper).startsWith('idb:default-video')
+      && result.darkScheme === true
+      && result.blobExists === true
+      && String(result.videoSrc).startsWith('blob:')
+    stopServer()
+    app.exit(passed ? 0 : 1)
+  } catch (error) {
+    safeLog('error', `DEFAULTS_FAILED ${error && error.stack ? error.stack : String(error)}`)
     stopServer()
     app.exit(1)
   }

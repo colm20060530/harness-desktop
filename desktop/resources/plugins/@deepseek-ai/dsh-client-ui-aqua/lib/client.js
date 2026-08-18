@@ -784,14 +784,14 @@ window.__ModuleLoader__.load({
 				init: () => ({
 					enabled: true,
 					mode: "mica",
-					blur: 20,
-					frost: 7,
+					blur: 16,
+					frost: 13,
 					fluidHue: 320,
 					fluidDepth: 25,
 					bgBrightness: 50,
 					dark: false,
-					background: "fluid",
-					wallpaper: "",
+					background: "wallpaper",
+					wallpaper: "idb:default-video",
 					whale: true,
 					critters: true,
 					mesh: true,
@@ -799,8 +799,8 @@ window.__ModuleLoader__.load({
 					press: true,
 					wallpaperBlur: 0,
 					wallpaperFrost: 0,
-					videoBlur: 6,
-					videoBrightness: 45,
+					videoBlur: 4.5,
+					videoBrightness: 20,
 					revision: -1
 				}),
 				actions: { sync: (d, next, revision) => {
@@ -3012,13 +3012,14 @@ void main() {
 			} catch {}
 		}
 		/** Shipped defaults — what a first-time install sees (the tuned look). */
+		/* Harness Desktop defaults: dark video wallpaper */
 		const SETTINGS_DEFAULTS = {
 			mode: "mica",
-			blur: 20,
-			frost: 7,
+			blur: 16,
+			frost: 13,
 			bgBrightness: 50,
-			background: "fluid",
-			wallpaper: "",
+			background: "wallpaper",
+			wallpaper: "idb:default-video",
 			whale: true,
 			critters: true,
 			mesh: true,
@@ -3028,8 +3029,8 @@ void main() {
 			fluidDepth: 25,
 			wallpaperBlur: 0,
 			wallpaperFrost: 0,
-			videoBlur: 6,
-			videoBrightness: 45
+			videoBlur: 4.5,
+			videoBrightness: 20
 		};
 		/** Numeric knob keys and their localStorage names. */
 		const NUMERIC_KEYS = {
