@@ -486,11 +486,34 @@ function createWindow() {
  *     bundled desktop-archive host plugin over same-origin
  *     `/api/desktop-archive.*` endpoints);
  *   - model-vision-hint.js: the DeepSeek 识图 reminder in 设置 → 模型.
+ *   - aqua-overrides.css: Aqua 玻璃补充覆盖（轨迹面板、设置选中态按钮）。
  * The official UI code is never modified.
  */
 function injectDesktopUi() {
   if (mainWindow === null) return
   const resources = resourceRoot()
+  const cssPath = path.join(resources, 'aqua-overrides.css')
+  if (fs.existsSync(cssPath)) {
+    const css = fs.readFileSync(cssPath, 'utf8')
+    mainWindow.webContents
+      .executeJavaScript(
+        `(() => {
+          const id = 'hd-aqua-overrides'
+          const old = document.getElementById(id)
+          if (old !== null) old.remove()
+          const style = document.createElement('style')
+          style.id = id
+          style.textContent = ${JSON.stringify(css)}
+          document.head.appendChild(style)
+        })()`,
+        true,
+      )
+      .then(() => appendLog('aqua overrides injected'))
+      .catch((error) => appendLog(`aqua overrides injection failed: ${error && error.message ? error.message : String(error)}`))
+  } else {
+    appendLog(`aqua overrides missing: ${cssPath}`)
+  }
+
   const scripts = ['archive-panel.js', 'model-vision-hint.js']
   for (const name of scripts) {
     const scriptPath = path.join(resources, name)
@@ -681,12 +704,31 @@ async function runUiCheck() {
       intro.textContent = '填入各提供方的 API 密钥即可使用其模型。DeepSeek deepseek-chat'
       dialog.appendChild(title)
       dialog.appendChild(intro)
+      // Synthetic settings nav cell (selected state).
+      const navCell = document.createElement('div')
+      navCell.className = 'x-navCell'
+      navCell.setAttribute('aria-current', 'true')
+      navCell.textContent = '模型'
+      dialog.appendChild(navCell)
       document.body.appendChild(dialog)
+      // Synthetic trajectory panel (rc.6 layout: split > tablePane[data-trajectory-scroll]).
+      const split = document.createElement('div')
+      split.id = 'hd-synthetic-trajectory'
+      const pane = document.createElement('div')
+      pane.setAttribute('data-trajectory-scroll', '')
+      split.appendChild(pane)
+      document.body.appendChild(split)
       await waitFor(1200)
       const hint = document.getElementById('hd-vision-hint')
+      const trajStyle = getComputedStyle(split)
+      const navStyle = getComputedStyle(navCell)
       return {
         hintFound: hint !== null,
         hintText: hint === null ? null : hint.textContent,
+        trajectoryBackdrop: trajStyle.backdropFilter,
+        trajectoryBackground: trajStyle.backgroundColor,
+        navBackdrop: navStyle.backdropFilter,
+        navBackground: navStyle.backgroundColor,
       }
     })()`)
     safeLog('log', `UI_RESULT ${JSON.stringify(result)}`)

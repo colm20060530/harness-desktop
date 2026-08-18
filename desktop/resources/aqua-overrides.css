@@ -1,0 +1,117 @@
+/*
+ * Harness Desktop — Aqua 主题补充覆盖层
+ *
+ * 这些规则不是修改官方 dsh 的源码，而是以「内置主题皮肤」的方式补上
+ * rc.6 里 Aqua 插件旧版选择器没覆盖到的界面：
+ *
+ *   1. 轨迹面板（rc.6 把容器从 data-dsh-trajectory 换成了新 DOM）：
+ *      让整块轨迹视图套上插件同款玻璃（模糊/磨砂旋钮实时生效）；
+ *   2. 设置里的选中态按钮（左侧导航、分段选择器、开关）：
+ *      不再用实色填充，改成「更高模糊度的玻璃」，与未选中项保持区分。
+ *
+ * 全部键控 html[data-dsh-aqua]，插件关闭时这些规则自动失效。
+ */
+
+/* ============ 1. 轨迹面板玻璃化（云母模式） ============ */
+html[data-dsh-aqua][data-dsh-float] div:has(> [data-trajectory-scroll]) {
+  background: var(--dsh-aqua-glass-card-light, rgba(255, 255, 255, 0.42));
+  -webkit-backdrop-filter: blur(var(--dsh-aqua-blur, 14px)) saturate(150%);
+  backdrop-filter: blur(var(--dsh-aqua-blur, 14px)) saturate(150%);
+  border: 1px solid rgba(19, 45, 83, 0.26);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.5), 0 10px 34px rgba(19, 45, 83, 0.16);
+}
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] div:has(> [data-trajectory-scroll]) {
+  background: var(--dsh-aqua-glass-card-dark, rgba(34, 38, 47, 0.5));
+  border-color: rgba(148, 180, 220, 0.34);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.08), 0 10px 34px rgba(2, 6, 14, 0.5);
+}
+
+/* 轨迹表格与滚动容器改为透明，让玻璃透出来 */
+html[data-dsh-aqua][data-dsh-float] div:has(> [data-trajectory-scroll]) table,
+html[data-dsh-aqua][data-dsh-float] div:has(> [data-trajectory-scroll]) [data-trajectory-scroll] {
+  background: transparent;
+}
+/* 顶部工具栏透明化 */
+html[data-dsh-aqua][data-dsh-float] div:has(> [data-trajectory-scroll]) [role="toolbar"] {
+  background: transparent;
+}
+/* 表头用半透明玻璃 */
+html[data-dsh-aqua][data-dsh-float] div:has(> [data-trajectory-scroll]) th {
+  background: color-mix(in srgb, #ffffff calc(34% * var(--dsh-aqua-frost, 1)), transparent);
+}
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] div:has(> [data-trajectory-scroll]) th {
+  background: color-mix(in srgb, #1c202a calc(36% * var(--dsh-aqua-frost, 1)), transparent);
+}
+
+/* 右侧「事件详情」侧栏玻璃化 */
+html[data-dsh-aqua][data-dsh-float] div:has(> [data-trajectory-scroll]) > aside[aria-label="Event details"] {
+  background: color-mix(in srgb, #ffffff calc(50% * var(--dsh-aqua-frost, 1)), transparent);
+  -webkit-backdrop-filter: blur(var(--dsh-aqua-blur, 14px)) saturate(150%);
+  backdrop-filter: blur(var(--dsh-aqua-blur, 14px)) saturate(150%);
+  border-left-color: rgba(19, 45, 83, 0.22);
+}
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] div:has(> [data-trajectory-scroll]) > aside[aria-label="Event details"] {
+  background: color-mix(in srgb, #1c202a calc(56% * var(--dsh-aqua-frost, 1)), transparent);
+  border-left-color: rgba(148, 180, 220, 0.3);
+}
+
+/* 轨迹面板玻璃化（兼容模式：保持原版排版，只加磨砂） */
+html[data-dsh-aqua][data-dsh-compat] div:has(> [data-trajectory-scroll]),
+html[data-dsh-aqua][data-dsh-compat] div:has(> [data-trajectory-scroll]) > aside[aria-label="Event details"] {
+  background: color-mix(in srgb, #ffffff calc(56% * var(--dsh-aqua-frost, 1)), transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+html[data-dsh-aqua][data-dsh-compat] body[data-ds-dark-theme] div:has(> [data-trajectory-scroll]),
+html[data-dsh-aqua][data-dsh-compat] body[data-ds-dark-theme] div:has(> [data-trajectory-scroll]) > aside[aria-label="Event details"] {
+  background: color-mix(in srgb, #14181f calc(58% * var(--dsh-aqua-frost, 1)), transparent);
+}
+html[data-dsh-aqua][data-dsh-compat] div:has(> [data-trajectory-scroll]) table,
+html[data-dsh-aqua][data-dsh-compat] div:has(> [data-trajectory-scroll]) [data-trajectory-scroll] {
+  background: transparent;
+}
+
+/* ============ 2. 设置里选中态按钮 → 高模糊玻璃（云母模式） ============ */
+/* 左侧导航项：选中的不再是实色填充，而是更模糊的玻璃 + 主题描边 */
+html[data-dsh-aqua][data-dsh-float] [role="dialog"] [class*="navCell"][aria-current="true"] {
+  background: color-mix(in srgb, #ffffff calc(56% * var(--dsh-aqua-surface-frost, 1)), transparent);
+  -webkit-backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) + 8px)) saturate(160%);
+  backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) + 8px)) saturate(160%);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.5), 0 0 0 1px color-mix(in srgb, #6e9be8 48%, transparent);
+}
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"] [class*="navCell"][aria-current="true"] {
+  background: color-mix(in srgb, #2a2e38 calc(56% * var(--dsh-aqua-surface-frost, 1)), transparent);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.1), 0 0 0 1px rgba(148, 180, 220, 0.45);
+}
+
+/* 分段选择器选中段 / 装饰开关选中态：高模糊玻璃而不是实色 */
+html[data-dsh-aqua][data-dsh-float] [class*="segActive"],
+html[data-dsh-aqua][data-dsh-float] [class*="toggleOn"],
+html[data-dsh-aqua][data-dsh-float] [class*="toggle"][aria-pressed="true"] {
+  background: color-mix(in srgb, #ffffff calc(52% * var(--dsh-aqua-frost, 1)), transparent);
+  -webkit-backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) + 6px)) saturate(160%);
+  backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) + 6px)) saturate(160%);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.45), 0 0 0 1px color-mix(in srgb, #6e9be8 48%, transparent);
+}
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [class*="segActive"],
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [class*="toggleOn"],
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [class*="toggle"][aria-pressed="true"] {
+  background: color-mix(in srgb, #2a2e38 calc(54% * var(--dsh-aqua-frost, 1)), transparent);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.1), 0 0 0 1px rgba(148, 180, 220, 0.45);
+}
+
+/* 兼容模式下选中态按钮同样玻璃化 */
+html[data-dsh-aqua][data-dsh-compat] [role="dialog"] [class*="navCell"][aria-current="true"],
+html[data-dsh-aqua][data-dsh-compat] [class*="segActive"],
+html[data-dsh-aqua][data-dsh-compat] [class*="toggleOn"],
+html[data-dsh-aqua][data-dsh-compat] [class*="toggle"][aria-pressed="true"] {
+  background: color-mix(in srgb, #ffffff calc(52% * var(--dsh-aqua-frost, 1)), transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+html[data-dsh-aqua][data-dsh-compat] body[data-ds-dark-theme] [role="dialog"] [class*="navCell"][aria-current="true"],
+html[data-dsh-aqua][data-dsh-compat] body[data-ds-dark-theme] [class*="segActive"],
+html[data-dsh-aqua][data-dsh-compat] body[data-ds-dark-theme] [class*="toggleOn"],
+html[data-dsh-aqua][data-dsh-compat] body[data-ds-dark-theme] [class*="toggle"][aria-pressed="true"] {
+  background: color-mix(in srgb, #1c202a calc(54% * var(--dsh-aqua-frost, 1)), transparent);
+}

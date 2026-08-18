@@ -41,7 +41,11 @@
 
     const icon = document.createElement('div')
     icon.className = 'hd-vision-hint-icon'
-    icon.textContent = '💡'
+    icon.setAttribute('aria-hidden', 'true')
+    icon.innerHTML =
+      '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" '
+      + 'stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/>'
+      + '<path d="M11 12h1v5h1"/></svg>'
 
     const body = document.createElement('div')
     body.className = 'hd-vision-hint-body'
@@ -116,7 +120,7 @@
     border-color: rgba(148, 180, 220, 0.3);
     box-shadow: inset 0 1px rgba(255, 255, 255, 0.07), 0 10px 30px rgba(2, 6, 14, 0.45);
   }
-  .hd-vision-hint-icon { font-size: 18px; line-height: 1.3; flex: none; }
+  .hd-vision-hint-icon { color: #6e9be8; flex: none; display: flex; align-items: center; margin-top: 1px; }
   .hd-vision-hint-body { flex: 1; min-width: 0; }
   .hd-vision-hint-title {
     color: #1d3556; font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 3px;
