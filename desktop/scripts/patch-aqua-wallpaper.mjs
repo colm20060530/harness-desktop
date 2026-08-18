@@ -132,6 +132,22 @@ function patchDefaults(source) {
   return source
 }
 
+/**
+ * 视频壁纸下的对话气泡：插件为可读性给气泡近乎实色背景（#ffffffb3 /
+ * #00000080），这里改成半透明玻璃，文字依旧清晰但背景是磨砂透出的视频。
+ */
+function patchVideoBubble(source) {
+  if (source.includes('rgba(13,18,25,0.5)')) return source
+  const light = 'html[data-dsh-float][data-dsh-aqua-wallpaper][data-dsh-aqua-media=video] [class*=bubble]{background:#ffffffb3'
+  const dark = 'html[data-dsh-float][data-dsh-aqua-wallpaper][data-dsh-aqua-media=video] body[data-ds-dark-theme] [class*=bubble]{background:#00000080'
+  if (!source.includes(light) || !source.includes(dark)) {
+    throw new Error('patch-aqua-wallpaper: video bubble rules not found (bundle changed?)')
+  }
+  source = source.replace(light, 'html[data-dsh-float][data-dsh-aqua-wallpaper][data-dsh-aqua-media=video] [class*=bubble]{background:rgba(255,255,255,0.42)')
+  source = source.replace(dark, 'html[data-dsh-float][data-dsh-aqua-wallpaper][data-dsh-aqua-media=video] body[data-ds-dark-theme] [class*=bubble]{background:rgba(13,18,25,0.5)')
+  return source
+}
+
 const target = process.argv[2]
 if (!target) {
   console.error('usage: node patch-aqua-wallpaper.mjs <path-to-lib/client.js>')
@@ -157,6 +173,7 @@ if (!source.includes(marker)) {
 // Defaults are applied even to bundles that already carry the wallpaper
 // patch (the marker is set, but the defaults may be from an older build).
 source = patchDefaults(source)
+source = patchVideoBubble(source)
 if (source !== before) {
   writeFileSync(file, source)
   console.log(`patched: ${file}`)

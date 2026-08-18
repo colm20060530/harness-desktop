@@ -169,7 +169,7 @@ html[data-dsh-aqua][data-dsh-float] [role="dialog"] [class*="editor"],
 html[data-dsh-aqua][data-dsh-float] [role="dialog"] [class*="rowCard"],
 html[data-dsh-aqua][data-dsh-float] [role="dialog"] [class*="addCard"],
 html[data-dsh-aqua][data-dsh-float] [role="dialog"] [class*="setupCard"] {
-  background: color-mix(in srgb, #ffffff calc(30% * var(--dsh-aqua-frost, 1)), transparent) !important;
+  background: color-mix(in srgb, #ffffff calc(48% * var(--dsh-aqua-surface-frost, 1)), transparent) !important;
   -webkit-backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) * 0.6)) saturate(140%);
   backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) * 0.6)) saturate(140%);
   border-color: rgba(19, 45, 83, 0.16) !important;
@@ -179,19 +179,19 @@ html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"] [cl
 html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"] [class*="rowCard"],
 html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"] [class*="addCard"],
 html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"] [class*="setupCard"] {
-  background: color-mix(in srgb, #1c202a calc(34% * var(--dsh-aqua-frost, 1)), transparent) !important;
+  background: color-mix(in srgb, #1c202a calc(50% * var(--dsh-aqua-surface-frost, 1)), transparent) !important;
   border-color: rgba(148, 180, 220, 0.2) !important;
 }
 
 /* 设置里的按钮 → 玻璃（选中态由下方更高模糊规则覆盖） */
 html[data-dsh-aqua][data-dsh-float] [role="dialog"] button {
-  background: color-mix(in srgb, #ffffff calc(32% * var(--dsh-aqua-frost, 1)), transparent);
+  background: color-mix(in srgb, #ffffff calc(58% * var(--dsh-aqua-surface-frost, 1)), transparent);
   -webkit-backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) * 0.8)) saturate(150%);
   backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) * 0.8)) saturate(150%);
   border-color: rgba(19, 45, 83, 0.18);
 }
 html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"] button {
-  background: color-mix(in srgb, #232a36 calc(34% * var(--dsh-aqua-frost, 1)), transparent);
+  background: color-mix(in srgb, #232a36 calc(60% * var(--dsh-aqua-surface-frost, 1)), transparent);
   border-color: rgba(148, 180, 220, 0.22);
 }
 
@@ -240,12 +240,35 @@ html[data-dsh-aqua][data-dsh-compat] body[data-ds-dark-theme] [role="dialog"][ar
   background: rgba(15, 22, 33, 0.6) !important;
 }
 html[data-dsh-aqua][data-dsh-compat] [role="dialog"] button {
-  background: color-mix(in srgb, #ffffff calc(30% * var(--dsh-aqua-frost, 1)), transparent) !important;
+  background: color-mix(in srgb, #ffffff calc(52% * var(--dsh-aqua-surface-frost, 1)), transparent) !important;
   -webkit-backdrop-filter: blur(8px) !important;
   backdrop-filter: blur(8px) !important;
 }
 html[data-dsh-aqua][data-dsh-compat] body[data-ds-dark-theme] [role="dialog"] button {
-  background: color-mix(in srgb, #232a36 calc(32% * var(--dsh-aqua-frost, 1)), transparent) !important;
+  background: color-mix(in srgb, #232a36 calc(54% * var(--dsh-aqua-surface-frost, 1)), transparent) !important;
+}
+
+/* ============ 6. 视频壁纸下的对话气泡：玻璃而不是实色 ============ */
+/* 插件自带的视频可读性规则会给气泡近乎实色的背景；这里改成半透明玻璃，
+   文字依旧清晰，但背景是磨砂玻璃透出的视频。 */
+html[data-dsh-aqua][data-dsh-float][data-dsh-aqua-wallpaper][data-dsh-aqua-media="video"] [class*="bubble"] {
+  background: rgba(255, 255, 255, 0.42) !important;
+  -webkit-backdrop-filter: blur(var(--dsh-aqua-blur, 14px)) saturate(150%);
+  backdrop-filter: blur(var(--dsh-aqua-blur, 14px)) saturate(150%);
+  border: 1px solid rgba(19, 45, 83, 0.2);
+}
+html[data-dsh-aqua][data-dsh-float][data-dsh-aqua-wallpaper][data-dsh-aqua-media="video"] body[data-ds-dark-theme] [class*="bubble"] {
+  background: rgba(13, 18, 25, 0.5) !important;
+  border-color: rgba(148, 180, 220, 0.26);
+}
+/* 兼容模式视频壁纸气泡 */
+html[data-dsh-aqua][data-dsh-compat][data-dsh-aqua-wallpaper][data-dsh-aqua-media="video"] [class*="bubble"] {
+  background: rgba(255, 255, 255, 0.44) !important;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+html[data-dsh-aqua][data-dsh-compat][data-dsh-aqua-wallpaper][data-dsh-aqua-media="video"] body[data-ds-dark-theme] [class*="bubble"] {
+  background: rgba(13, 18, 25, 0.52) !important;
 }
 
 /* ============ 3. 回答中的代码/路径等实色背景 → 半透明玻璃 ============ */

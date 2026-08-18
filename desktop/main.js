@@ -756,6 +756,13 @@ async function runUiCheck() {
       settingsOverlay.appendChild(settingsMask)
       settingsOverlay.appendChild(settingsPanel)
       document.body.appendChild(settingsOverlay)
+      // Synthetic message bubble under video-wallpaper mode.
+      document.documentElement.setAttribute('data-dsh-aqua-wallpaper', '')
+      document.documentElement.setAttribute('data-dsh-aqua-media', 'video')
+      const bubble = document.createElement('div')
+      bubble.className = 'x-bubble'
+      bubble.textContent = '用户消息'
+      document.body.appendChild(bubble)
       await waitFor(1200)
       const hint = document.getElementById('hd-vision-hint')
       const trajStyle = getComputedStyle(split)
@@ -766,6 +773,36 @@ async function runUiCheck() {
       const panelStyle = getComputedStyle(settingsPanel)
       const maskStyle = getComputedStyle(settingsMask)
       const settingsButtonStyle = getComputedStyle(settingsButton)
+      const bubbleStyle = getComputedStyle(bubble)
+      const htmlMedia = document.documentElement.getAttribute('data-dsh-aqua-media')
+      const htmlWallpaper = document.documentElement.hasAttribute('data-dsh-aqua-wallpaper')
+      const bubbleMatched = document.querySelector('html[data-dsh-aqua][data-dsh-float][data-dsh-aqua-wallpaper][data-dsh-aqua-media="video"] [class*="bubble"]') === bubble
+      const bubbleRules = []
+      for (const sheet of document.styleSheets) {
+        try {
+          for (const rule of sheet.cssRules) {
+            if (rule.selectorText !== undefined && rule.selectorText.includes('bubble') && rule.style !== undefined && rule.style.background) {
+              bubbleRules.push({
+                owner: sheet.ownerNode && sheet.ownerNode.getAttribute ? (sheet.ownerNode.getAttribute('data-plugin-css') || sheet.ownerNode.id || sheet.ownerNode.tagName) : '?',
+                selector: rule.selectorText.slice(0, 110),
+                background: rule.style.background,
+                important: rule.style.getPropertyPriority('background'),
+              })
+            }
+          }
+        } catch {
+          // cross-origin sheet
+        }
+      }
+      // Probe: does toggling the video attributes change the resolved style?
+      document.documentElement.removeAttribute('data-dsh-aqua-wallpaper')
+      document.documentElement.removeAttribute('data-dsh-aqua-media')
+      const bubbleBgOff = getComputedStyle(bubble).backgroundColor
+      document.documentElement.setAttribute('data-dsh-aqua-wallpaper', '')
+      document.documentElement.setAttribute('data-dsh-aqua-media', 'video')
+      const bubbleBgOn = getComputedStyle(bubble).backgroundColor
+      document.documentElement.removeAttribute('data-dsh-aqua-wallpaper')
+      document.documentElement.removeAttribute('data-dsh-aqua-media')
       return {
         hintFound: hint !== null,
         hintText: hint === null ? null : hint.textContent,
@@ -782,6 +819,14 @@ async function runUiCheck() {
         settingsMaskBackground: maskStyle.backgroundColor,
         settingsButtonBackdrop: settingsButtonStyle.backdropFilter,
         settingsButtonBackground: settingsButtonStyle.backgroundColor,
+        bubbleBackdrop: bubbleStyle.backdropFilter,
+        bubbleBackground: bubbleStyle.backgroundColor,
+        htmlMedia,
+        htmlWallpaper,
+        bubbleMatched,
+        bubbleRules,
+        bubbleBgOff,
+        bubbleBgOn,
       }
     })()`)
     safeLog('log', `UI_RESULT ${JSON.stringify(result)}`)
