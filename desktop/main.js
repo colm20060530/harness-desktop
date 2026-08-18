@@ -50,11 +50,16 @@ const BUILTIN_PLUGINS = [
 const PATCH_FILENAME = 'desktop.patch.yml'
 const SMOKE = process.argv.includes('--smoke')
 const ARCHIVE_CHECK = process.argv.includes('--archive-check')
+const ARCHIVE_REAL_CHECK = process.argv.includes('--archive-real-check')
 const WALLPAPER_CHECK = process.argv.includes('--wallpaper-check')
 const WALLPAPER_SEED = process.argv.includes('--wallpaper-seed')
 const WALLPAPER_SEED_KIND = argAfter('--wallpaper-seed') === 'video' ? 'video' : 'image'
 const UI_CHECK = process.argv.includes('--ui-check')
 const DEFAULTS_CHECK = process.argv.includes('--defaults-check')
+let archiveRealStarted = false
+let archiveRealPhase = 0
+let archiveRealResult = {}
+let archiveRealDone = false
 
 /** Console output that can never take the app down (e.g. EPIPE when the
  *  parent console closes while a self-check is running). */
@@ -469,6 +474,18 @@ function createWindow() {
       injectDesktopUi()
       if (SMOKE) void runSmokeCheck()
       if (ARCHIVE_CHECK) void runArchiveCheck()
+      if (ARCHIVE_REAL_CHECK) {
+        if (!archiveRealStarted) {
+          archiveRealStarted = true
+          void runArchiveRealPhase1()
+        } else if (archiveRealPhase === 1) {
+          archiveRealPhase = 2
+          void runArchiveRealPhase2()
+        } else if (archiveRealPhase === 2) {
+          archiveRealPhase = 3
+          void runArchiveRealPhase3()
+        }
+      }
       if (WALLPAPER_CHECK && !wallpaperCheckStarted) {
         wallpaperCheckStarted = true
         void runWallpaperCheck()
@@ -533,7 +550,7 @@ function injectDesktopUi() {
   // Self-checks other than --defaults-check use a throwaway profile; skip
   // the first-run defaults seed so its one-time page reload cannot interrupt
   // an in-flight check.
-  const skipDefaultsSeed = (SMOKE || ARCHIVE_CHECK || WALLPAPER_CHECK || WALLPAPER_SEED || UI_CHECK) && !DEFAULTS_CHECK
+  const skipDefaultsSeed = (SMOKE || ARCHIVE_CHECK || ARCHIVE_REAL_CHECK || WALLPAPER_CHECK || WALLPAPER_SEED || UI_CHECK) && !DEFAULTS_CHECK
   const scripts = ['archive-panel.js', 'model-vision-hint.js']
   if (!skipDefaultsSeed) scripts.push('defaults-seed.js')
   for (const name of scripts) {
@@ -635,6 +652,252 @@ async function runArchiveCheck() {
     safeLog('error', `ARCHIVE_FAILED ${error && error.stack ? error.stack : String(error)}`)
     stopServer()
     app.exit(1)
+  }
+}
+
+/**
+ * End-to-end self-check for the archive manager's delete flow against REAL
+ * archived sessions (registry state + on-disk session logs). Requires a
+ * DSH_HOME fixture that already contains archived sessions; drives the actual
+ * injected panel UI (row delete -> confirm modal -> reload; select-all ->
+ * batch delete -> confirm -> reload) and then verifies, from the main
+ * process, that only the deleted session directories were removed and the
+ * workspace accounting was updated without touching any other session.
+ */
+function archiveRealFsState() {
+  const home = dshHome
+  const sessionsRoot = path.join(home, 'sessions')
+  const dirs = []
+  try {
+    for (const project of fs.readdirSync(sessionsRoot, { withFileTypes: true })) {
+      if (!project.isDirectory()) continue
+      for (const entry of fs.readdirSync(path.join(sessionsRoot, project.name), { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue
+        const dir = path.join(sessionsRoot, project.name, entry.name)
+        let hasLog = false
+        try {
+          hasLog = fs.readdirSync(dir).some((name) => name === 'session.jsonl' || name === 'session.jsonl.zstd')
+        } catch {
+          // dir vanished mid-scan
+        }
+        dirs.push({ sessionId: entry.name, dir, hasLog })
+      }
+    }
+  } catch {
+    // report as-is
+  }
+  let workspaceJson = null
+  try {
+    workspaceJson = JSON.parse(fs.readFileSync(path.join(home, 'storages', 'workspace.json'), 'utf8'))
+  } catch {
+    // missing
+  }
+  const firstWorkspace = workspaceJson?.tables?.workspaces ? Object.values(workspaceJson.tables.workspaces)[0] : null
+  return {
+    dirs,
+    archivedSessionIds: workspaceJson?.global?.archivedSessionIds ?? null,
+    sessionIds: firstWorkspace?.sessionIds ?? null,
+  }
+}
+
+function archiveRealFinalize(ok, message) {
+  if (archiveRealDone) return
+  archiveRealDone = true
+  archiveRealResult.fsAfter = archiveRealFsState()
+  archiveRealResult.message = message
+  archiveRealResult.passed = ok
+  safeLog('log', `ARCHIVE_REAL_RESULT ${JSON.stringify(archiveRealResult)}`)
+  try {
+    const dir = path.join(app.getPath('userData'), 'logs')
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(path.join(dir, 'archive-real-check.json'), JSON.stringify(archiveRealResult, null, 2))
+  } catch {
+    // diagnostics only
+  }
+  stopServer()
+  app.exit(ok ? 0 : 1)
+}
+
+function archiveRealArmWatchdog(phase) {
+  setTimeout(() => {
+    if (archiveRealDone) return
+    safeLog('error', `ARCHIVE_REAL_TIMEOUT at phase ${phase}`)
+    archiveRealFinalize(false, `timed out waiting for reload after phase ${phase}`)
+  }, 20000)
+}
+
+async function runArchiveRealPhase1() {
+  try {
+    const info = await mainWindow.webContents.executeJavaScript(`(async () => {
+      const waitFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      const root = document.getElementById('root')
+      const t0 = Date.now()
+      while (root === null || root.children.length === 0) {
+        if (Date.now() - t0 > 45000) break
+        await waitFor(250)
+      }
+      const call = async (path, body) => {
+        const response = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) })
+        return { status: response.status, data: await response.json() }
+      }
+      // Archive the first real session through the OFFICIAL archive API, then
+      // the injected panel must list it.
+      const firstId = 'session-2ea86967-5946-402e-9de3-15536b74436d'
+      const archive = await call('/api/workspace.archiveSession', {
+        type: 'client-request',
+        rpcId: crypto.randomUUID(),
+        method: 'workspace.archiveSession',
+        payload: { sessionId: firstId },
+      })
+      const listBefore = await call('/api/desktop-archive.list', {})
+      document.getElementById('hd-archive-fab')?.click()
+      await waitFor(700)
+      const list1 = await call('/api/desktop-archive.list', {})
+      const rows = [...document.querySelectorAll('.hd-archive-row')].map((row) => ({
+        sessionId: row.getAttribute('data-session-id'),
+        title: row.querySelector('.hd-archive-row-title')?.textContent ?? null,
+        delDisabled: row.querySelector('.hd-archive-btn-soft-danger')?.disabled ?? null,
+        restoreDisabled: row.querySelector('.hd-archive-btn-soft')?.disabled ?? null,
+      }))
+      const batchDel = document.getElementById('hd-archive-delete-all')
+      const batchInfo = { disabled: batchDel?.disabled ?? null, text: batchDel?.textContent ?? null }
+      const firstRealRow = document.querySelector('.hd-archive-row[data-session-id="' + firstId + '"]')
+      firstRealRow?.querySelector('.hd-archive-btn-soft-danger')?.click()
+      await waitFor(200)
+      const modal = document.getElementById('hd-archive-modal')
+      return {
+        archive,
+        listBefore,
+        list1,
+        rows,
+        batchInfo,
+        modalOpened: modal !== null,
+        modalTitle: modal?.querySelector('.hd-archive-modal-title')?.textContent ?? null,
+        modalText: modal?.querySelector('.hd-archive-modal-text')?.textContent ?? null,
+      }
+    })()`)
+    archiveRealResult.phase1 = info
+    if (!info.modalOpened) return archiveRealFinalize(false, 'row delete modal did not open')
+    if (!info.archive?.data?.result?.ok) return archiveRealFinalize(false, `official archive call failed: ${JSON.stringify(info.archive)}`)
+    if (!(info.list1?.data?.items ?? []).some((item) => item.sessionId === 'session-2ea86967-5946-402e-9de3-15536b74436d')) {
+      return archiveRealFinalize(false, 'archived session not listed in panel after official archive')
+    }
+    archiveRealPhase = 1
+    archiveRealArmWatchdog(1)
+    mainWindow.webContents
+      .executeJavaScript(`document.getElementById('hd-archive-modal')?.querySelector('.hd-archive-btn-danger')?.click()`)
+      .catch(() => {})
+  } catch (error) {
+    safeLog('error', `ARCHIVE_REAL_PHASE1_FAILED ${error && error.stack ? error.stack : String(error)}`)
+    archiveRealFinalize(false, `phase1 failed: ${String(error && error.message ? error.message : error)}`)
+  }
+}
+
+async function runArchiveRealPhase2() {
+  try {
+    const info = await mainWindow.webContents.executeJavaScript(`(async () => {
+      const waitFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      const root = document.getElementById('root')
+      const t0 = Date.now()
+      while (root === null || root.children.length === 0) {
+        if (Date.now() - t0 > 45000) break
+        await waitFor(250)
+      }
+      const call = async (path, body) => {
+        const response = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) })
+        return { status: response.status, data: await response.json() }
+      }
+      // Archive the second real session through the OFFICIAL API too, then
+      // select all and batch-delete it from the panel.
+      const secondId = 'session-a51a3972-42e0-4734-9fc3-9f2d402da359'
+      const archive2 = await call('/api/workspace.archiveSession', {
+        type: 'client-request',
+        rpcId: crypto.randomUUID(),
+        method: 'workspace.archiveSession',
+        payload: { sessionId: secondId },
+      })
+      document.getElementById('hd-archive-fab')?.click()
+      await waitFor(700)
+      const list2 = await call('/api/desktop-archive.list', {})
+      const selectAll = document.getElementById('hd-archive-select-all')
+      selectAll?.click()
+      await waitFor(150)
+      const batchDel = document.getElementById('hd-archive-delete-all')
+      const batchEnabled = batchDel !== null && !batchDel.disabled
+      batchDel?.click()
+      await waitFor(200)
+      const modal = document.getElementById('hd-archive-modal')
+      return {
+        archive2,
+        list2,
+        batchEnabled,
+        selectAllChecked: selectAll?.checked ?? null,
+        modalOpened: modal !== null,
+        modalText: modal?.querySelector('.hd-archive-modal-text')?.textContent ?? null,
+      }
+    })()`)
+    archiveRealResult.phase2 = info
+    if (!info.modalOpened) return archiveRealFinalize(false, 'batch delete modal did not open')
+    if (!info.archive2?.data?.result?.ok) return archiveRealFinalize(false, `official archive 2 failed: ${JSON.stringify(info.archive2)}`)
+    if (!(info.list2?.data?.items ?? []).some((item) => item.sessionId === 'session-a51a3972-42e0-4734-9fc3-9f2d402da359')) {
+      return archiveRealFinalize(false, 'second archived session not listed in panel')
+    }
+    archiveRealPhase = 2
+    archiveRealArmWatchdog(2)
+    mainWindow.webContents
+      .executeJavaScript(`document.getElementById('hd-archive-modal')?.querySelector('.hd-archive-btn-danger')?.click()`)
+      .catch(() => {})
+  } catch (error) {
+    safeLog('error', `ARCHIVE_REAL_PHASE2_FAILED ${error && error.stack ? error.stack : String(error)}`)
+    archiveRealFinalize(false, `phase2 failed: ${String(error && error.message ? error.message : error)}`)
+  }
+}
+
+async function runArchiveRealPhase3() {
+  try {
+    const info = await mainWindow.webContents.executeJavaScript(`(async () => {
+      const waitFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      const root = document.getElementById('root')
+      const t0 = Date.now()
+      while (root === null || root.children.length === 0) {
+        if (Date.now() - t0 > 45000) break
+        await waitFor(250)
+      }
+      const call = async (path, body) => {
+        const response = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) })
+        return { status: response.status, data: await response.json() }
+      }
+      const list3 = await call('/api/desktop-archive.list', {})
+      return { list3 }
+    })()`)
+    archiveRealResult.phase3 = info
+    const state = archiveRealFsState()
+    const dirs = state.dirs
+    const firstGone = !dirs.some((d) => d.sessionId === 'session-2ea86967-5946-402e-9de3-15536b74436d')
+    const secondGone = !dirs.some((d) => d.sessionId === 'session-a51a3972-42e0-4734-9fc3-9f2d402da359')
+    const rootMarkerIntact = fs.existsSync(path.join(dshHome, 'sessions', 'root-marker.txt'))
+    const projectMarkerIntact = fs.existsSync(path.join(dshHome, 'sessions', '--D-DeepseekHarness--', 'project-marker.txt'))
+    let projCacheOk = false
+    try {
+      projCacheOk = JSON.parse(fs.readFileSync(path.join(dshHome, 'storages', 'session_projcache.json'), 'utf8'))?.tables?.sessions !== undefined
+    } catch {
+      projCacheOk = false
+    }
+    const list3Ids = (info.list3?.data?.items ?? []).map((item) => item.sessionId)
+    const archivedEmpty = (state.archivedSessionIds ?? []).length === 0
+    const workspaceUpdated =
+      !(state.sessionIds ?? []).includes('session-2ea86967-5946-402e-9de3-15536b74436d') &&
+      !(state.sessionIds ?? []).includes('session-a51a3972-42e0-4734-9fc3-9f2d402da359')
+    const ok = firstGone && secondGone && rootMarkerIntact && projectMarkerIntact && projCacheOk && list3Ids.length === 0 && archivedEmpty && workspaceUpdated
+    archiveRealFinalize(
+      ok,
+      ok
+        ? 'all delete flows verified'
+        : `firstGone=${firstGone} secondGone=${secondGone} rootMarker=${rootMarkerIntact} projectMarker=${projectMarkerIntact} projCache=${projCacheOk} listEmpty=${list3Ids.length === 0} archivedEmpty=${archivedEmpty} workspaceUpdated=${workspaceUpdated}`,
+    )
+  } catch (error) {
+    safeLog('error', `ARCHIVE_REAL_PHASE3_FAILED ${error && error.stack ? error.stack : String(error)}`)
+    archiveRealFinalize(false, `phase3 failed: ${String(error && error.message ? error.message : error)}`)
   }
 }
 

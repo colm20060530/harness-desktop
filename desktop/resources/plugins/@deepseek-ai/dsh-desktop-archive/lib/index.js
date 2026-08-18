@@ -276,11 +276,19 @@ export function apply(ctx) {
       const { sessionIds } = await readBody(req)
       const ids = sanitizeIds(sessionIds)
       const deleted = []
+      const failed = []
       for (const id of ids) {
-        await deleteSession(ctx, id)
-        deleted.push(id)
+        try {
+          await deleteSession(ctx, id)
+          deleted.push(id)
+        } catch (error) {
+          failed.push({
+            sessionId: id,
+            message: error instanceof Error ? error.message : String(error),
+          })
+        }
       }
-      respond(res, 200, { ok: true, deleted })
+      respond(res, 200, { ok: true, deleted, failed })
     } catch (error) {
       fail(res, error)
     }

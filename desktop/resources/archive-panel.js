@@ -108,9 +108,20 @@
     busy = true
     setBusy(true)
     try {
-      await call(API_DELETE, { sessionIds: ids })
-      toast(`已删除 ${ids.length} 个对话，正在刷新…`, 'ok')
-      setTimeout(() => window.location.reload(), 600)
+      const data = await call(API_DELETE, { sessionIds: ids })
+      const failed = data.failed || []
+      const deletedCount = (data.deleted || []).length
+      if (failed.length === 0) {
+        toast(`已删除 ${deletedCount} 个对话，正在刷新…`, 'ok')
+        setTimeout(() => window.location.reload(), 600)
+      } else if (deletedCount > 0) {
+        toast(`已删除 ${deletedCount} 个对话；${failed.length} 个失败：${failed[0].message}`, 'error')
+        setTimeout(() => window.location.reload(), 1800)
+      } else {
+        toast(`删除失败：${failed[0]?.message || '未知错误'}`, 'error')
+        busy = false
+        setBusy(false)
+      }
     } catch (error) {
       busy = false
       setBusy(false)
@@ -193,12 +204,13 @@
 
     listEl.textContent = ''
     if (items.length === 0) {
-      const empty = el('div', `${NS}-empty`, '暂无归档对话')
+      const empty = el('div', `${NS}-empty`, '暂无归档对话。在工作区会话上点击「归档」后，会显示在这里。')
       listEl.appendChild(empty)
     }
 
     for (const item of items) {
       const row = el('div', `${NS}-row`)
+      row.dataset.sessionId = item.sessionId
       if (selected.has(item.sessionId)) row.classList.add(`${NS}-selected`)
 
       const check = el('input', `${NS}-check`)
@@ -224,8 +236,13 @@
       restore.onclick = () => runRestore([item.sessionId])
       const del = el('button', `${NS}-btn ${NS}-btn-soft-danger`, '删除')
       del.title = '从磁盘永久删除'
-      del.disabled = item.running
-      del.onclick = () => requestDelete([item.sessionId], false)
+      del.onclick = () => {
+        if (item.running) {
+          toast('该对话当前正在运行，请先结束它再删除', 'error')
+          return
+        }
+        requestDelete([item.sessionId], false)
+      }
       actions.appendChild(restore)
       actions.appendChild(del)
 
