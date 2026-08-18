@@ -736,12 +736,36 @@ async function runUiCheck() {
       conv.appendChild(inlineCode)
       conv.appendChild(pre)
       document.body.appendChild(conv)
+      // Synthetic new-session button.
+      const newSession = document.createElement('button')
+      newSession.className = 'x-newSession'
+      newSession.textContent = '新会话'
+      document.body.appendChild(newSession)
+      // Synthetic settings dialog (mask + panel + button).
+      const settingsOverlay = document.createElement('div')
+      settingsOverlay.setAttribute('role', 'presentation')
+      const settingsMask = document.createElement('div')
+      settingsMask.className = 'x-mask'
+      const settingsPanel = document.createElement('div')
+      settingsPanel.setAttribute('role', 'dialog')
+      settingsPanel.setAttribute('aria-modal', 'true')
+      const settingsButton = document.createElement('button')
+      settingsButton.className = 'x-secondaryButton'
+      settingsButton.textContent = '按钮'
+      settingsPanel.appendChild(settingsButton)
+      settingsOverlay.appendChild(settingsMask)
+      settingsOverlay.appendChild(settingsPanel)
+      document.body.appendChild(settingsOverlay)
       await waitFor(1200)
       const hint = document.getElementById('hd-vision-hint')
       const trajStyle = getComputedStyle(split)
       const navStyle = getComputedStyle(navCell)
       const inlineStyle = getComputedStyle(inlineCode)
       const preStyle = getComputedStyle(pre)
+      const newSessionStyle = getComputedStyle(newSession)
+      const panelStyle = getComputedStyle(settingsPanel)
+      const maskStyle = getComputedStyle(settingsMask)
+      const settingsButtonStyle = getComputedStyle(settingsButton)
       return {
         hintFound: hint !== null,
         hintText: hint === null ? null : hint.textContent,
@@ -751,6 +775,13 @@ async function runUiCheck() {
         navBackground: navStyle.backgroundColor,
         inlineCodeBackground: inlineStyle.backgroundColor,
         preBackground: preStyle.backgroundColor,
+        newSessionBackdrop: newSessionStyle.backdropFilter,
+        newSessionBackground: newSessionStyle.backgroundColor,
+        settingsPanelBackdrop: panelStyle.backdropFilter,
+        settingsPanelBackground: panelStyle.backgroundColor,
+        settingsMaskBackground: maskStyle.backgroundColor,
+        settingsButtonBackdrop: settingsButtonStyle.backdropFilter,
+        settingsButtonBackground: settingsButtonStyle.backgroundColor,
       }
     })()`)
     safeLog('log', `UI_RESULT ${JSON.stringify(result)}`)

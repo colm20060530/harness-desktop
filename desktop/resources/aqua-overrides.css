@@ -74,13 +74,13 @@ html[data-dsh-aqua][data-dsh-compat] div:has(> [data-trajectory-scroll]) [data-t
 /* ============ 2. 设置里选中态按钮 → 高模糊玻璃（云母模式） ============ */
 /* 左侧导航项：选中的不再是实色填充，而是更模糊的玻璃 + 主题描边 */
 html[data-dsh-aqua][data-dsh-float] [role="dialog"] [class*="navCell"][aria-current="true"] {
-  background: color-mix(in srgb, #ffffff calc(56% * var(--dsh-aqua-surface-frost, 1)), transparent);
+  background: color-mix(in srgb, #ffffff calc(56% * var(--dsh-aqua-surface-frost, 1)), transparent) !important;
   -webkit-backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) + 8px)) saturate(160%);
   backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) + 8px)) saturate(160%);
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.5), 0 0 0 1px color-mix(in srgb, #6e9be8 48%, transparent);
 }
 html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"] [class*="navCell"][aria-current="true"] {
-  background: color-mix(in srgb, #2a2e38 calc(56% * var(--dsh-aqua-surface-frost, 1)), transparent);
+  background: color-mix(in srgb, #2a2e38 calc(56% * var(--dsh-aqua-surface-frost, 1)), transparent) !important;
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.1), 0 0 0 1px rgba(148, 180, 220, 0.45);
 }
 
@@ -88,7 +88,7 @@ html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"] [cl
 html[data-dsh-aqua][data-dsh-float] [class*="segActive"],
 html[data-dsh-aqua][data-dsh-float] [class*="toggleOn"],
 html[data-dsh-aqua][data-dsh-float] [class*="toggle"][aria-pressed="true"] {
-  background: color-mix(in srgb, #ffffff calc(52% * var(--dsh-aqua-frost, 1)), transparent);
+  background: color-mix(in srgb, #ffffff calc(52% * var(--dsh-aqua-frost, 1)), transparent) !important;
   -webkit-backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) + 6px)) saturate(160%);
   backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) + 6px)) saturate(160%);
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.45), 0 0 0 1px color-mix(in srgb, #6e9be8 48%, transparent);
@@ -96,7 +96,7 @@ html[data-dsh-aqua][data-dsh-float] [class*="toggle"][aria-pressed="true"] {
 html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [class*="segActive"],
 html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [class*="toggleOn"],
 html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [class*="toggle"][aria-pressed="true"] {
-  background: color-mix(in srgb, #2a2e38 calc(54% * var(--dsh-aqua-frost, 1)), transparent);
+  background: color-mix(in srgb, #2a2e38 calc(54% * var(--dsh-aqua-frost, 1)), transparent) !important;
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.1), 0 0 0 1px rgba(148, 180, 220, 0.45);
 }
 
@@ -105,7 +105,7 @@ html[data-dsh-aqua][data-dsh-compat] [role="dialog"] [class*="navCell"][aria-cur
 html[data-dsh-aqua][data-dsh-compat] [class*="segActive"],
 html[data-dsh-aqua][data-dsh-compat] [class*="toggleOn"],
 html[data-dsh-aqua][data-dsh-compat] [class*="toggle"][aria-pressed="true"] {
-  background: color-mix(in srgb, #ffffff calc(52% * var(--dsh-aqua-frost, 1)), transparent);
+  background: color-mix(in srgb, #ffffff calc(52% * var(--dsh-aqua-frost, 1)), transparent) !important;
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
@@ -113,7 +113,139 @@ html[data-dsh-aqua][data-dsh-compat] body[data-ds-dark-theme] [role="dialog"] [c
 html[data-dsh-aqua][data-dsh-compat] body[data-ds-dark-theme] [class*="segActive"],
 html[data-dsh-aqua][data-dsh-compat] body[data-ds-dark-theme] [class*="toggleOn"],
 html[data-dsh-aqua][data-dsh-compat] body[data-ds-dark-theme] [class*="toggle"][aria-pressed="true"] {
-  background: color-mix(in srgb, #1c202a calc(54% * var(--dsh-aqua-frost, 1)), transparent);
+  background: color-mix(in srgb, #1c202a calc(54% * var(--dsh-aqua-frost, 1)), transparent) !important;
+}
+
+/* ============ 4. 侧边栏「新对话」按钮 + 输入栏附加按钮 → 玻璃 ============ */
+html[data-dsh-aqua][data-dsh-float] button[class*="newSession"] {
+  background: color-mix(in srgb, #ffffff calc(38% * var(--dsh-aqua-frost, 1)), transparent) !important;
+  -webkit-backdrop-filter: blur(var(--dsh-aqua-blur, 14px)) saturate(150%);
+  backdrop-filter: blur(var(--dsh-aqua-blur, 14px)) saturate(150%);
+  border-color: rgba(19, 45, 83, 0.24) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.5);
+}
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] button[class*="newSession"] {
+  background: color-mix(in srgb, #232a36 calc(40% * var(--dsh-aqua-frost, 1)), transparent) !important;
+  border-color: rgba(148, 180, 220, 0.28) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.08);
+}
+html[data-dsh-aqua][data-dsh-float] [data-composer-card] button[class*="add"] {
+  background: color-mix(in srgb, #ffffff calc(34% * var(--dsh-aqua-frost, 1)), transparent) !important;
+  -webkit-backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) * 0.7)) saturate(150%);
+  backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) * 0.7)) saturate(150%);
+}
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [data-composer-card] button[class*="add"] {
+  background: color-mix(in srgb, #232a36 calc(36% * var(--dsh-aqua-frost, 1)), transparent) !important;
+}
+
+/* ============ 5. 设置面板整体玻璃化（云母模式） ============ */
+/* 背景蒙层变浅，让壁纸/流体透过面板玻璃可见 */
+html[data-dsh-aqua][data-dsh-float] div[role="presentation"] > [class*="mask"] {
+  background: rgba(19, 45, 83, 0.22) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+  backdrop-filter: blur(6px) !important;
+}
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] div[role="presentation"] > [class*="mask"] {
+  background: rgba(4, 8, 14, 0.3) !important;
+}
+
+/* 面板本身：更透明的玻璃 + 模糊跟随旋钮 */
+html[data-dsh-aqua][data-dsh-float] [role="dialog"][aria-modal="true"] {
+  background: rgba(255, 255, 255, 0.42) !important;
+  -webkit-backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) * 2.2)) saturate(150%) !important;
+  backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) * 2.2)) saturate(150%) !important;
+  border: 1px solid rgba(19, 45, 83, 0.22) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.5), 0 24px 70px rgba(19, 45, 83, 0.22) !important;
+}
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"][aria-modal="true"] {
+  background: rgba(15, 22, 33, 0.55) !important;
+  border-color: rgba(148, 180, 220, 0.28) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.07), 0 24px 70px rgba(2, 6, 14, 0.6) !important;
+}
+
+/* 面板内部的卡片/编辑器等实色表面 → 半透明玻璃 */
+html[data-dsh-aqua][data-dsh-float] [role="dialog"] [class*="card"],
+html[data-dsh-aqua][data-dsh-float] [role="dialog"] [class*="editor"],
+html[data-dsh-aqua][data-dsh-float] [role="dialog"] [class*="rowCard"],
+html[data-dsh-aqua][data-dsh-float] [role="dialog"] [class*="addCard"],
+html[data-dsh-aqua][data-dsh-float] [role="dialog"] [class*="setupCard"] {
+  background: color-mix(in srgb, #ffffff calc(30% * var(--dsh-aqua-frost, 1)), transparent) !important;
+  -webkit-backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) * 0.6)) saturate(140%);
+  backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) * 0.6)) saturate(140%);
+  border-color: rgba(19, 45, 83, 0.16) !important;
+}
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"] [class*="card"],
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"] [class*="editor"],
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"] [class*="rowCard"],
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"] [class*="addCard"],
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"] [class*="setupCard"] {
+  background: color-mix(in srgb, #1c202a calc(34% * var(--dsh-aqua-frost, 1)), transparent) !important;
+  border-color: rgba(148, 180, 220, 0.2) !important;
+}
+
+/* 设置里的按钮 → 玻璃（选中态由下方更高模糊规则覆盖） */
+html[data-dsh-aqua][data-dsh-float] [role="dialog"] button {
+  background: color-mix(in srgb, #ffffff calc(32% * var(--dsh-aqua-frost, 1)), transparent);
+  -webkit-backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) * 0.8)) saturate(150%);
+  backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) * 0.8)) saturate(150%);
+  border-color: rgba(19, 45, 83, 0.18);
+}
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"] button {
+  background: color-mix(in srgb, #232a36 calc(34% * var(--dsh-aqua-frost, 1)), transparent);
+  border-color: rgba(148, 180, 220, 0.22);
+}
+
+/* 主操作按钮（如模型页的「添加」）：保留蓝色调玻璃，白字可读 */
+html[data-dsh-aqua][data-dsh-float] [role="dialog"] button[class*="primary"] {
+  background: color-mix(in srgb, #4a7fd9 calc(62% * var(--dsh-aqua-surface-frost, 1.2)), transparent) !important;
+  color: #ffffff !important;
+  border-color: rgba(110, 155, 232, 0.55) !important;
+}
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"] button[class*="primary"] {
+  background: color-mix(in srgb, #3f6fc0 calc(66% * var(--dsh-aqua-surface-frost, 1.2)), transparent) !important;
+}
+
+/* 外观主题方块选中态 → 高模糊玻璃 */
+html[data-dsh-aqua][data-dsh-float] [role="dialog"] [class*="themeCube"][aria-pressed="true"] {
+  background: color-mix(in srgb, #ffffff calc(52% * var(--dsh-aqua-surface-frost, 1)), transparent) !important;
+  -webkit-backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) + 8px)) saturate(160%);
+  backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) + 8px)) saturate(160%);
+  border-color: color-mix(in srgb, #6e9be8 55%, transparent) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.5), 0 0 0 1px color-mix(in srgb, #6e9be8 45%, transparent);
+}
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"] [class*="themeCube"][aria-pressed="true"] {
+  background: color-mix(in srgb, #2a2e38 calc(54% * var(--dsh-aqua-surface-frost, 1)), transparent) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.1), 0 0 0 1px rgba(148, 180, 220, 0.45);
+}
+
+/* 设置里的输入框/下拉 → 半透明玻璃 */
+html[data-dsh-aqua][data-dsh-float] [role="dialog"] input,
+html[data-dsh-aqua][data-dsh-float] [role="dialog"] select {
+  background: color-mix(in srgb, #ffffff calc(26% * var(--dsh-aqua-frost, 1)), transparent) !important;
+  border-color: rgba(19, 45, 83, 0.18) !important;
+}
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"] input,
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] [role="dialog"] select {
+  background: color-mix(in srgb, #161d29 calc(32% * var(--dsh-aqua-frost, 1)), transparent) !important;
+  border-color: rgba(148, 180, 220, 0.24) !important;
+}
+
+/* 兼容模式：设置面板/按钮同样玻璃化 */
+html[data-dsh-aqua][data-dsh-compat] [role="dialog"][aria-modal="true"] {
+  background: rgba(255, 255, 255, 0.5) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  backdrop-filter: blur(14px) !important;
+}
+html[data-dsh-aqua][data-dsh-compat] body[data-ds-dark-theme] [role="dialog"][aria-modal="true"] {
+  background: rgba(15, 22, 33, 0.6) !important;
+}
+html[data-dsh-aqua][data-dsh-compat] [role="dialog"] button {
+  background: color-mix(in srgb, #ffffff calc(30% * var(--dsh-aqua-frost, 1)), transparent) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  backdrop-filter: blur(8px) !important;
+}
+html[data-dsh-aqua][data-dsh-compat] body[data-ds-dark-theme] [role="dialog"] button {
+  background: color-mix(in srgb, #232a36 calc(32% * var(--dsh-aqua-frost, 1)), transparent) !important;
 }
 
 /* ============ 3. 回答中的代码/路径等实色背景 → 半透明玻璃 ============ */
