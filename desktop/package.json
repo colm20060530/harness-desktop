@@ -60,6 +60,7 @@
       ],
       "icon": "build/icon.png"
     },
+    "electronDist": "node_modules/electron/dist",
     "nsis": {
       "oneClick": false,
       "perMachine": false,

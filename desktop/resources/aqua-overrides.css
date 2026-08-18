@@ -115,3 +115,36 @@ html[data-dsh-aqua][data-dsh-compat] body[data-ds-dark-theme] [class*="toggleOn"
 html[data-dsh-aqua][data-dsh-compat] body[data-ds-dark-theme] [class*="toggle"][aria-pressed="true"] {
   background: color-mix(in srgb, #1c202a calc(54% * var(--dsh-aqua-frost, 1)), transparent);
 }
+
+/* ============ 3. 回答中的代码/路径等实色背景 → 半透明玻璃 ============ */
+/* 行内代码（如 ~\.codex\skills、desktop/resources/skills/） */
+html[data-dsh-aqua] [data-conversation-scroll] code:not(pre code) {
+  background: color-mix(in srgb, #e4edf8 calc(34% * var(--dsh-aqua-frost, 1)), transparent) !important;
+  -webkit-backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) * 0.5)) saturate(140%);
+  backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) * 0.5)) saturate(140%);
+}
+html[data-dsh-aqua] body[data-ds-dark-theme] [data-conversation-scroll] code:not(pre code) {
+  background: color-mix(in srgb, #172334 calc(40% * var(--dsh-aqua-frost, 1)), transparent) !important;
+}
+
+/* 代码块（main.js / prepare-resources.ps1 这类整段代码） */
+html[data-dsh-aqua] [data-conversation-scroll] pre {
+  background: color-mix(in srgb, #f0f5fb calc(38% * var(--dsh-aqua-frost, 1)), transparent) !important;
+  -webkit-backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) * 0.6)) saturate(140%);
+  backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) * 0.6)) saturate(140%);
+}
+html[data-dsh-aqua] body[data-ds-dark-theme] [data-conversation-scroll] pre {
+  background: color-mix(in srgb, #0d141f calc(46% * var(--dsh-aqua-frost, 1)), transparent) !important;
+}
+
+/* 兜底：主题令牌层也换成半透明值，覆盖代码块标题条等派生表面 */
+html[data-dsh-aqua] {
+  --dsw-alias-markdown-inline-code: rgba(228, 237, 248, 0.36) !important;
+  --dsw-alias-markdown-code-block: rgba(240, 245, 251, 0.42) !important;
+  --dsw-alias-markdown-code-block-banner: rgba(245, 248, 253, 0.48) !important;
+}
+html[data-dsh-aqua] body[data-ds-dark-theme] {
+  --dsw-alias-markdown-inline-code: rgba(23, 35, 52, 0.46) !important;
+  --dsw-alias-markdown-code-block: rgba(13, 20, 31, 0.56) !important;
+  --dsw-alias-markdown-code-block-banner: rgba(18, 27, 41, 0.58) !important;
+}

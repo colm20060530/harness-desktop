@@ -12,16 +12,13 @@
   'use strict'
 
   const ID = 'hd-vision-hint'
-  const KEY = 'hd.vision-hint.dismissed'
 
   let timer = null
+  let dismissedFlag = false
+  let periodic = null
 
   function dismissed() {
-    try {
-      return localStorage.getItem(KEY) === '1'
-    } catch {
-      return false
-    }
+    return dismissedFlag
   }
 
   function findModelTitle(dialog) {
@@ -66,11 +63,7 @@
     close.setAttribute('aria-label', '关闭提示')
     close.textContent = '知道了'
     close.addEventListener('click', () => {
-      try {
-        localStorage.setItem(KEY, '1')
-      } catch {
-        // ignore
-      }
+      dismissedFlag = true
       card.remove()
     })
 
@@ -148,4 +141,10 @@
   const observer = new MutationObserver(schedule)
   observer.observe(document.body, { childList: true, subtree: true })
   schedule()
+  // Safety net: some settings views render asynchronously after the dialog
+  // opens; re-scan periodically in case a mutation batch was missed.
+  periodic = setInterval(schedule, 2000)
+  window.addEventListener('beforeunload', () => {
+    if (periodic !== null) clearInterval(periodic)
+  })
 })()

@@ -718,10 +718,22 @@ async function runUiCheck() {
       pane.setAttribute('data-trajectory-scroll', '')
       split.appendChild(pane)
       document.body.appendChild(split)
+      // Synthetic conversation with inline code + code block (markdown glass).
+      const conv = document.createElement('div')
+      conv.setAttribute('data-conversation-scroll', '')
+      const inlineCode = document.createElement('code')
+      inlineCode.textContent = '~\\\\.codex\\\\skills'
+      const pre = document.createElement('pre')
+      pre.textContent = 'main.js + prepare-resources.ps1'
+      conv.appendChild(inlineCode)
+      conv.appendChild(pre)
+      document.body.appendChild(conv)
       await waitFor(1200)
       const hint = document.getElementById('hd-vision-hint')
       const trajStyle = getComputedStyle(split)
       const navStyle = getComputedStyle(navCell)
+      const inlineStyle = getComputedStyle(inlineCode)
+      const preStyle = getComputedStyle(pre)
       return {
         hintFound: hint !== null,
         hintText: hint === null ? null : hint.textContent,
@@ -729,6 +741,8 @@ async function runUiCheck() {
         trajectoryBackground: trajStyle.backgroundColor,
         navBackdrop: navStyle.backdropFilter,
         navBackground: navStyle.backgroundColor,
+        inlineCodeBackground: inlineStyle.backgroundColor,
+        preBackground: preStyle.backgroundColor,
       }
     })()`)
     safeLog('log', `UI_RESULT ${JSON.stringify(result)}`)
