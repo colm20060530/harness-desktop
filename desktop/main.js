@@ -24,6 +24,16 @@ const net = require('node:net')
 const fs = require('node:fs')
 const path = require('node:path')
 
+// Read the app's own version from the packaged/working package.json so dev
+// launches report the real version too (app.getVersion() in dev mode returns
+// the Electron runtime version instead).
+let APP_VERSION = ''
+try {
+  APP_VERSION = require('./package.json').version || ''
+} catch {
+  APP_VERSION = ''
+}
+
 // Optional test hook: point Electron's userData (localStorage, IndexedDB,
 // cache) at a throwaway directory so a dev/test launch never touches the
 // real user profile. Production launches leave this unset.
@@ -56,10 +66,14 @@ const WALLPAPER_SEED = process.argv.includes('--wallpaper-seed')
 const WALLPAPER_SEED_KIND = argAfter('--wallpaper-seed') === 'video' ? 'video' : 'image'
 const UI_CHECK = process.argv.includes('--ui-check')
 const DEFAULTS_CHECK = process.argv.includes('--defaults-check')
+const SETTINGS_DUMP = process.argv.includes('--settings-dump')
+const UPDATE_CHECK = process.argv.includes('--update-check')
 let archiveRealStarted = false
 let archiveRealPhase = 0
 let archiveRealResult = {}
 let archiveRealDone = false
+let settingsDumpStarted = false
+let updateCheckStarted = false
 
 /** Console output that can never take the app down (e.g. EPIPE when the
  *  parent console closes while a self-check is running). */
@@ -377,7 +391,12 @@ async function startServer(resources) {
 
   serverChild = spawn(nodeExe, [binPath, ...args], {
     cwd: hostDir,
-    env: { ...process.env, DSH_HOME: dshHome, DSH_DESKTOP_ASSETS: resources },
+    env: {
+      ...process.env,
+      DSH_HOME: dshHome,
+      DSH_DESKTOP_ASSETS: resources,
+      DSH_DESKTOP_APP_VERSION: process.env.DSH_DESKTOP_APP_VERSION || APP_VERSION || app.getVersion(),
+    },
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -504,6 +523,14 @@ function createWindow() {
         // post-reload page time to settle before verifying.
         setTimeout(() => void runDefaultsCheck(), 6000)
       }
+      if (SETTINGS_DUMP && !settingsDumpStarted) {
+        settingsDumpStarted = true
+        void runSettingsDump()
+      }
+      if (UPDATE_CHECK && !updateCheckStarted) {
+        updateCheckStarted = true
+        void runUpdateCheck()
+      }
     }
   })
 
@@ -550,8 +577,8 @@ function injectDesktopUi() {
   // Self-checks other than --defaults-check use a throwaway profile; skip
   // the first-run defaults seed so its one-time page reload cannot interrupt
   // an in-flight check.
-  const skipDefaultsSeed = (SMOKE || ARCHIVE_CHECK || ARCHIVE_REAL_CHECK || WALLPAPER_CHECK || WALLPAPER_SEED || UI_CHECK) && !DEFAULTS_CHECK
-  const scripts = ['archive-panel.js', 'model-vision-hint.js']
+  const skipDefaultsSeed = (SMOKE || ARCHIVE_CHECK || ARCHIVE_REAL_CHECK || WALLPAPER_CHECK || WALLPAPER_SEED || UI_CHECK || SETTINGS_DUMP || UPDATE_CHECK) && !DEFAULTS_CHECK
+  const scripts = ['archive-panel.js', 'model-vision-hint.js', 'update-check.js']
   if (!skipDefaultsSeed) scripts.push('defaults-seed.js')
   for (const name of scripts) {
     const scriptPath = path.join(resources, name)
@@ -1209,6 +1236,115 @@ async function runDefaultsCheck() {
     app.exit(passed ? 0 : 1)
   } catch (error) {
     safeLog('error', `DEFAULTS_FAILED ${error && error.stack ? error.stack : String(error)}`)
+    stopServer()
+    app.exit(1)
+  }
+}
+
+/**
+ * Diagnostic: open the real settings dialog and verify the injected
+ * "检查更新" entry is present and functional (clicks it and captures the
+ * result dialog). Debug-only; requires network for the release check.
+ */
+async function runSettingsDump() {
+  try {
+    const result = await mainWindow.webContents.executeJavaScript(`(async () => {
+      const waitFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      const root = document.getElementById('root')
+      const t0 = Date.now()
+      while (root === null || root.children.length === 0) {
+        if (Date.now() - t0 > 45000) break
+        await waitFor(250)
+      }
+      const candidates = [...document.querySelectorAll('[role="button"], button, [class*="nav"], [class*="Nav"], li, a')]
+        .filter((el) => el.textContent.trim() === '设置')
+      let clicked = null
+      for (const el of candidates) {
+        el.click()
+        clicked = { tag: el.tagName, cls: el.className, text: el.textContent.trim() }
+        break
+      }
+      await waitFor(1500)
+      const dialogs = [...document.querySelectorAll('[role="dialog"]')].map((d) => {
+        const nav = d.querySelector('nav')
+        const navCells = nav === null ? [] : [...nav.querySelectorAll('button')].map((b) => b.textContent.trim())
+        return {
+          cls: d.className,
+          navCells,
+          hasUpdateCell: d.querySelector('#hd-update-cell') !== null,
+        }
+      })
+      // Exercise the injected "检查更新" entry: click it and capture the dialog.
+      const updateCell = document.getElementById('hd-update-cell')
+      let updateClick = { cellFound: updateCell !== null }
+      if (updateCell !== null) {
+        updateCell.click()
+        let modal = null
+        for (let i = 0; i < 30 && modal === null; i += 1) {
+          await waitFor(250)
+          modal = document.getElementById('hd-update-modal')
+        }
+        updateClick = {
+          cellFound: true,
+          modalOpened: modal !== null,
+          title: modal?.querySelector('.hd-update-modal-title')?.textContent ?? null,
+          text: modal?.querySelector('.hd-update-modal-text')?.textContent ?? null,
+          link: modal?.querySelector('a.hd-update-btn-link')?.href ?? null,
+        }
+      }
+      return { clicked, dialogs, updateClick }
+    })()`)
+    safeLog('log', `SETTINGS_DUMP ${JSON.stringify(result).slice(0, 3000)}`)
+    try {
+      const dir = path.join(app.getPath('userData'), 'logs')
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'settings-dump.json'), JSON.stringify(result, null, 2))
+    } catch {
+      // diagnostics only
+    }
+    stopServer()
+    app.exit(0)
+  } catch (error) {
+    safeLog('error', `SETTINGS_DUMP_FAILED ${error && error.stack ? error.stack : String(error)}`)
+    stopServer()
+    app.exit(1)
+  }
+}
+
+/**
+ * Self-check for the "检查更新" host route: calls the local update-check
+ * endpoint and records the version comparison result. Used by the developer
+ * smoke pipeline; requires network access to GitHub/Gitee release APIs.
+ */
+async function runUpdateCheck() {
+  try {
+    const result = await mainWindow.webContents.executeJavaScript(`(async () => {
+      const waitFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      const root = document.getElementById('root')
+      const t0 = Date.now()
+      while (root === null || root.children.length === 0) {
+        if (Date.now() - t0 > 45000) break
+        await waitFor(250)
+      }
+      const response = await fetch('/api/desktop-update.check', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      })
+      return { status: response.status, data: await response.json() }
+    })()`)
+    safeLog('log', `UPDATE_CHECK_RESULT ${JSON.stringify(result)}`)
+    try {
+      const dir = path.join(app.getPath('userData'), 'logs')
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'update-check.json'), JSON.stringify(result, null, 2))
+    } catch {
+      // diagnostics only
+    }
+    stopServer()
+    app.exit(result?.data?.ok === true ? 0 : 1)
+  } catch (error) {
+    safeLog('error', `UPDATE_CHECK_FAILED ${error && error.stack ? error.stack : String(error)}`)
     stopServer()
     app.exit(1)
   }

@@ -130,6 +130,84 @@ async function listArchived(ctx) {
 }
 
 /**
+ * Compare dotted versions like "2.0.10" vs "2.0.9" numerically.
+ * Returns 1 when a > b, -1 when a < b, 0 when equal.
+ */
+function compareVersions(a, b) {
+  const pa = String(a || '0').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0)
+  const pb = String(b || '0').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0)
+  const len = Math.max(pa.length, pb.length)
+  for (let i = 0; i < len; i += 1) {
+    const na = pa[i] ?? 0
+    const nb = pb[i] ?? 0
+    if (na > nb) return 1
+    if (na < nb) return -1
+  }
+  return 0
+}
+
+async function fetchJson(url, timeoutMs = 8000) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: { accept: 'application/json' },
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    return await response.json()
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
+ * Check the latest published release on GitHub (with Gitee as a fallback).
+ * Only compares version numbers; the caller decides what to do with the URL.
+ */
+async function checkUpdate() {
+  const current = process.env.DSH_DESKTOP_APP_VERSION || '0.0.0'
+  const sources = [
+    {
+      name: 'GitHub',
+      url: 'https://api.github.com/repos/colm20060530/harness-desktop/releases/latest',
+      tag: (json) => json?.tag_name,
+      link: (json) => json?.html_url || 'https://github.com/colm20060530/harness-desktop/releases',
+    },
+    {
+      name: 'Gitee',
+      url: 'https://gitee.com/api/v5/repos/colm0530/harness-desktop/releases/latest',
+      tag: (json) => json?.tag_name,
+      link: (json) => json?.html_url || 'https://gitee.com/colm0530/harness-desktop/releases',
+    },
+  ]
+  let lastError = null
+  for (const source of sources) {
+    try {
+      const json = await fetchJson(source.url)
+      const latest = source.tag(json)
+      if (!latest) throw new Error('release payload has no tag_name')
+      const url = source.link(json)
+      return {
+        ok: true,
+        source: source.name,
+        current,
+        latest,
+        upToDate: compareVersions(current, latest) >= 0,
+        url,
+      }
+    } catch (error) {
+      lastError = error
+    }
+  }
+  return {
+    ok: false,
+    current,
+    message: lastError instanceof Error ? lastError.message : String(lastError),
+  }
+}
+
+/**
  * Restore one archived session (idempotent): remove the id from the
  * registry-global archive set. This mirrors the inverse of the shipped
  * archiveSession() — the registry's own queue + durable setState, so the
@@ -289,6 +367,15 @@ export function apply(ctx) {
         }
       }
       respond(res, 200, { ok: true, deleted, failed })
+    } catch (error) {
+      fail(res, error)
+    }
+  })
+
+  registerRoute(ctx, '/api/desktop-update.check', async (req, res) => {
+    try {
+      const result = await checkUpdate()
+      respond(res, 200, result)
     } catch (error) {
       fail(res, error)
     }

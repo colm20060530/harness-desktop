@@ -63,6 +63,7 @@ Harness Desktop 是一个全新独立构建的 Windows 桌面客户端：它以 
 | 独立数据目录 | 默认数据存放于应用自己的目录，不污染官方 `~/.dsh` |
 | 出厂默认观感 | 首次启动即深色模式 + 内置视频壁纸；玻璃模糊 16 / 磨砂 13 / 视频模糊 6 / 视频亮度 20 |
 | 启动动画 | 启动等待期间播放深海主题开场动画 |
+| 检查更新 | 设置面板内置「检查更新」：仅提示当前版本与最新版本，并给出发布页链接，不自动下载 |
 | 归档管理 | 右下角「恢复归档」面板：恢复、永久删除与批量管理已归档会话，删除需二次确认 |
 
 ### 完整智能体能力（官方引擎）
@@ -133,13 +134,13 @@ Harness Desktop 不是简单的聊天机器人，而是任务型 AI 智能体，
 
 | 文件 | 说明 |
 | --- | --- |
-| `Harness-Desktop-Setup-2.0.2.exe` | 安装版：向导安装、创建桌面/开始菜单快捷方式、可在「应用和功能」中卸载 |
+| `Harness-Desktop-Setup-2.0.3.exe` | 安装版：向导安装、创建桌面/开始菜单快捷方式、可在「应用和功能」中卸载 |
 
 Gitee 用户注意：Gitee Release 同步发布（[https://gitee.com/colm0530/harness-desktop/releases](https://gitee.com/colm0530/harness-desktop/releases)）。因 Gitee 单附件大小限制，安装包拆分为多个分卷上传，请下载全部分卷后按 Release 页说明合并（附 SHA-256 校验值）；GitHub Releases 提供免合并的完整版。
 
 ### 安装步骤
 
-1. 双击 `Harness-Desktop-Setup-2.0.2.exe`；
+1. 双击 `Harness-Desktop-Setup-2.0.3.exe`；
 2. 若出现 SmartScreen「Windows 已保护你的电脑」提示，点击「更多信息 → 仍要运行」（软件暂未做代码签名，属正常提示，见 [FAQ Q1](#常见问题-faq)）；
 3. 按向导选择安装目录（默认即可），勾选快捷方式；
 4. 点击安装并完成。
@@ -147,7 +148,7 @@ Gitee 用户注意：Gitee Release 同步发布（[https://gitee.com/colm0530/ha
 ### 静默安装（可选）
 
 ```powershell
-Harness-Desktop-Setup-2.0.2.exe /S /D=D:\HarnessDesktop
+Harness-Desktop-Setup-2.0.3.exe /S /D=D:\HarnessDesktop
 ```
 
 注意：`/D=` 后跟安装目录，且必须是命令行**最后一个参数**。
@@ -537,6 +538,19 @@ my-plugin/
 ---
 
 ## 版本发布
+
+### v2.0.3（2026-08-18）
+
+新增（检查更新）：
+
+- 设置面板新增「检查更新」入口：点击后查询 GitHub / Gitee 最新发布版本，仅做版本比对；
+- 检测到新版本时弹出提示，显示当前版本、最新版本与发布页链接，点击链接在浏览器中打开项目发布页，由用户自行决定是否更新；
+- 检测不到新版本时提示「已是最新版本」；网络不可用时提示检查失败原因；
+- 本功能不会自动下载或安装任何更新。
+
+- 安装包：`Harness-Desktop-Setup-2.0.3.exe`（约 195 MB，含内置视频壁纸）；
+- 发布地址：<https://github.com/colm20060530/harness-desktop/releases/tag/v2.0.3>；
+- Gitee 同步发布：<https://gitee.com/colm0530/harness-desktop/releases>（分卷上传，见 Release 页说明）。
 
 ### v2.0.2（2026-08-18）
 
