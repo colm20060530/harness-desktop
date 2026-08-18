@@ -50,11 +50,12 @@
 | --- | --- |
 | 即装即用 | 内置 Node.js 24 运行时与完整 dsh 服务端，用户机器**无需**安装 Node/npm/Python/浏览器 |
 | 独立窗口 | 告别浏览器标签页，双击图标即用 |
-| 自动拉起服务 | 启动时自动在本地拉起后端服务（默认端口 3080，被占用时自动换空闲端口） |
+| 自动拉起服务 | 启动时自动在本地拉起后端服务（默认固定端口 3080；异常退出遗留的服务会被自动回收，保证网页存储与设置始终稳定） |
 | 插件自愈 | 每次启动自动检查并修复内置插件，卸载无法持久 |
 | 单实例运行 | 重复启动只会聚焦已有窗口，不会开第二个服务 |
 | 关闭即清理 | 关闭窗口自动结束本地服务进程，不留残留 |
 | 独立数据目录 | 默认数据放在应用自己的目录，**不污染**官方 `~/.dsh` |
+| 动态开场动画 | 启动等待期间播放深海主题开场动画（呼吸光圈、轨道粒子、流光标题、进度条） |
 
 ### 🧠 完整智能体能力（官方引擎）
 
@@ -74,14 +75,14 @@ Harness Desktop 不是聊天机器人，而是**任务型 AI 智能体**。你�
 
 | 类别 | 能力 |
 | --- | --- |
-| 对话 | 多会话管理、会话归档、中英文输入、上下文连续追问 |
+| 对话 | 多会话管理、会话归档、**归档恢复与批量管理（右下角「恢复归档」）**、中英文输入、上下文连续追问 |
 | 工具 | 文件读写、命令执行、网页搜索、子代理、后台任务、技能（Skills） |
 | 规划 | 目标拆解（Goals）、计划模式（Plan）、步骤清单实时推进 |
 | 视图 | 对话视图、轨迹视图（回放/时间轴/搜索/区间聚焦） |
 | 安全 | 只读 / 工作区读写 / 完全访问三档沙箱、权限升级审批、失败即拒绝 |
 | 模型 | 默认 DeepSeek 官方模型；支持 OpenAI 兼容协议接入任意服务商 |
 | 扩展 | 插件化架构（Cordis），可安装插件、自定义命令与工具 |
-| UI | Aqua 玻璃拟态（内置、默认开启）、浅色/深色/跟随系统主题 |
+| UI | Aqua 玻璃拟态（内置、默认开启、不可卸载）、图片/视频壁纸重启自动恢复、浅色/深色/跟随系统主题 |
 
 ---
 
@@ -369,10 +370,13 @@ harness-desktop/
 │   ├── package.json            # 应用与打包配置（含 allowScripts 授权）
 │   ├── host-package.json       # 内置 dsh 运行时依赖清单
 │   ├── resources/
-│   │   └── aqua.patch.yml      # 内置插件注册覆盖层（源码）
+│   │   ├── desktop.patch.yml   # 内置插件注册覆盖层（源码）
+│   │   ├── archive-panel.js    # 右下角「恢复归档」管理面板（注入脚本）
+│   │   └── plugins/            # 内置插件包（Aqua 主题 + 归档管理器）
 │   ├── scripts/
-│   │   ├── prepare-resources.ps1   # 准备 Node/dsh/插件运行时资源
-│   │   └── make-icon.ps1           # 生成应用图标
+│   │   ├── prepare-resources.ps1      # 准备 Node/dsh/插件运行时资源
+│   │   ├── patch-aqua-wallpaper.mjs   # 壁纸持久化 + rc.6 兼容补丁
+│   │   └── make-icon.ps1              # 生成应用图标
 │   └── build/icon.png          # 应用图标
 ├── scripts/build.ps1           # 一键构建脚本
 ├── release/                    # 最终发布产物（安装版 + 便携版）
@@ -394,8 +398,8 @@ Harness Desktop（Electron 主进程）
 │              └─ junction → dsh-home\profiles\node_modules
 ├─ 启动内置 Node（resources\node\node.exe）
 │    └─ node_modules\@deepseek-ai\dsh\lib\bin.js web
-│         --patch resources\aqua.patch.yml   ← 插件注册覆盖层（每次启动必带）
-│         --port 3080（占用则自动换空闲端口）
+│         --patch resources\desktop.patch.yml   ← 内置插件注册覆盖层（每次启动必带）
+│         --port 3080（固定端口，异常残留自动回收）
 └─ BrowserWindow 加载 http://127.0.0.1:<port>
 ```
 

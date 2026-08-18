@@ -1,63 +1,42 @@
 #!/usr/bin/env pwsh
-# Generate the app icon (512x512 PNG) used by electron-builder.
+# Generate the app icon (512x512 PNG) used by electron-builder and the
+# dev-mode window. The brand icon is the project's own DeepSeek-style
+# mark (picture/icons8-deepseek-94.png), upscaled with high-quality
+# bicubic interpolation. Falls back to the existing build icon when the
+# source picture is absent (e.g. fresh clones that skip picture/).
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
-$outDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'build'
+$root = Split-Path $PSScriptRoot -Parent
+$outDir = Join-Path $root 'build'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 $outPath = Join-Path $outDir 'icon.png'
 
+$sourceCandidates = @(
+    (Join-Path (Split-Path $root -Parent) 'picture\icons8-deepseek-94.png'),
+    (Join-Path $root 'picture\icons8-deepseek-94.png')
+)
+$source = $sourceCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $source) {
+    if (Test-Path $outPath) {
+        Write-Host "source icon not found; keeping existing $outPath" -ForegroundColor Yellow
+        exit 0
+    }
+    throw 'brand icon source missing (picture/icons8-deepseek-94.png)'
+}
+
+$src = [System.Drawing.Image]::FromFile($source)
 $size = 512
-$bmp = New-Object System.Drawing.Bitmap($size, $size)
+$bmp = New-Object System.Drawing.Bitmap($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
 $g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-$g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAlias
-
-$radius = 104
-$rect = New-Object System.Drawing.Rectangle(12, 12, ($size - 24), ($size - 24))
-$path = New-Object System.Drawing.Drawing2D.GraphicsPath
-$d = $radius * 2
-$path.AddArc($rect.X, $rect.Y, $d, $d, 180, 90)
-$path.AddArc($rect.Right - $d, $rect.Y, $d, $d, 270, 90)
-$path.AddArc($rect.Right - $d, $rect.Bottom - $d, $d, $d, 0, 90)
-$path.AddArc($rect.X, $rect.Bottom - $d, $d, $d, 90, 90)
-$path.CloseFigure()
-
-$bgBrush = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
-    $rect,
-    [System.Drawing.Color]::FromArgb(255, 26, 61, 92),
-    [System.Drawing.Color]::FromArgb(255, 8, 16, 26),
-    90.0)
-$g.FillPath($bgBrush, $path)
-
-$glow = New-Object System.Drawing.Drawing2D.GraphicsPath
-$glowRect = New-Object System.Drawing.Rectangle(56, 40, 400, 300)
-$glow.AddEllipse($glowRect)
-$glowBrush = New-Object System.Drawing.Drawing2D.PathGradientBrush($glow)
-$glowBrush.CenterColor = [System.Drawing.Color]::FromArgb(70, 90, 190, 235)
-$glowBrush.SurroundColors = @([System.Drawing.Color]::FromArgb(0, 90, 190, 235))
-$g.FillEllipse($glowBrush, $glowRect)
-
-$stroke = New-Object System.Drawing.Pen(
-    [System.Drawing.Color]::FromArgb(190, 140, 220, 248), 3)
-$g.DrawPath($stroke, $path)
-
-$font = New-Object System.Drawing.Font('Segoe UI', 248, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-$textBrush = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
-    $rect,
-    [System.Drawing.Color]::FromArgb(255, 190, 238, 255),
-    [System.Drawing.Color]::FromArgb(255, 96, 178, 224),
-    90.0)
-$fmt = New-Object System.Drawing.StringFormat
-$fmt.Alignment = [System.Drawing.StringAlignment]::Center
-$fmt.LineAlignment = [System.Drawing.StringAlignment]::Center
-$rectF = New-Object System.Drawing.RectangleF($rect.X, $rect.Y, $rect.Width, $rect.Height)
-$g.DrawString('H', $font, $textBrush, $rectF, $fmt)
-
-$whaleBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(235, 190, 238, 255))
-$g.FillEllipse($whaleBrush, 372, 396, 18, 18)
-
+$g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+$g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+$g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+$g.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
+$rect = New-Object System.Drawing.Rectangle(0, 0, $size, $size)
+$g.DrawImage($src, $rect, 0, 0, $src.Width, $src.Height, [System.Drawing.GraphicsUnit]::Pixel)
 $g.Dispose()
+$src.Dispose()
 $bmp.Save($outPath, [System.Drawing.Imaging.ImageFormat]::Png)
 $bmp.Dispose()
 Write-Host "icon written: $outPath"

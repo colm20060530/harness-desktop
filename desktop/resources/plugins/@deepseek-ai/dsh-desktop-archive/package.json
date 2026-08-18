@@ -1,0 +1,17 @@
+{
+  "name": "@deepseek-ai/dsh-desktop-archive",
+  "version": "1.0.0",
+  "description": "Harness Desktop built-in archive manager: restore archived conversations and permanently delete them from disk, without touching the official dsh storage APIs.",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "dependencies": {}
+}

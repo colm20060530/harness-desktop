@@ -7,13 +7,13 @@
  *   1. Resolves the app-managed DSH_HOME (override with --dsh-home or
  *      DSH_DESKTOP_HOME; default: <userData>/dsh-home — official ~/.dsh is
  *      never touched, so official `dsh web` stays stock).
- *   2. Installs the built-in Aqua plugin into that home (self-healing on
- *      every launch): the plugin package is copied to
- *      $DSH_HOME/plugins/@deepseek-ai/dsh-client-ui-aqua and linked into
+ *   2. Installs the built-in plugins (Aqua glass theme + archive manager)
+ *      into that home (self-healing on every launch): each plugin package is
+ *      copied to $DSH_HOME/plugins/<id> and linked into
  *      $DSH_HOME/profiles/node_modules, exactly like the official installer.
  *   3. Starts the bundled DeepSeek Harness web server with a bundled Node
- *      runtime, passing the built-in plugin as a --patch overlay (so the
- *      plugin is always on in this app and cannot be removed from the UI).
+ *      runtime, passing the built-in plugins as a --patch overlay (so they
+ *      are always on in this app and cannot be removed from the UI).
  *   4. Opens the web UI in an Electron window and shuts the server down when
  *      the window closes.
  */
@@ -24,11 +24,45 @@ const net = require('node:net')
 const fs = require('node:fs')
 const path = require('node:path')
 
+// Optional test hook: point Electron's userData (localStorage, IndexedDB,
+// cache) at a throwaway directory so a dev/test launch never touches the
+// real user profile. Production launches leave this unset.
+if (process.env.DSH_DESKTOP_USERDATA) {
+  try {
+    app.setPath('userData', path.resolve(process.env.DSH_DESKTOP_USERDATA))
+  } catch {
+    // setPath must run before ready; ignore failures and use the default.
+  }
+}
+
 const DEFAULT_PORT = 3080
 const STARTUP_TIMEOUT_MS = 150_000
-const PLUGIN_ID = '@deepseek-ai/dsh-client-ui-aqua'
-const PATCH_FILENAME = 'aqua.patch.yml'
+const BUILTIN_PLUGINS = [
+  {
+    id: '@deepseek-ai/dsh-client-ui-aqua',
+    bundle: 'lib/client.js',
+  },
+  {
+    id: '@deepseek-ai/dsh-desktop-archive',
+    bundle: 'lib/index.js',
+  },
+]
+const PATCH_FILENAME = 'desktop.patch.yml'
 const SMOKE = process.argv.includes('--smoke')
+const ARCHIVE_CHECK = process.argv.includes('--archive-check')
+const WALLPAPER_CHECK = process.argv.includes('--wallpaper-check')
+const WALLPAPER_SEED = process.argv.includes('--wallpaper-seed')
+const WALLPAPER_SEED_KIND = argAfter('--wallpaper-seed') === 'video' ? 'video' : 'image'
+
+/** Console output that can never take the app down (e.g. EPIPE when the
+ *  parent console closes while a self-check is running). */
+function safeLog(method, ...args) {
+  try {
+    console[method](...args)
+  } catch {
+    // stdout/stderr may be closed — diagnostics still go to the log file.
+  }
+}
 
 process.on('uncaughtException', (error) => {
   try {
@@ -41,7 +75,7 @@ process.on('uncaughtException', (error) => {
   } catch {
     // ignore
   }
-  console.error(`UNCAUGHT ${error && error.stack ? error.stack : String(error)}`)
+  safeLog('error', `UNCAUGHT ${error && error.stack ? error.stack : String(error)}`)
   app.exit(1)
 })
 
@@ -49,6 +83,7 @@ let mainWindow = null
 let serverChild = null
 let chosenPort = 0
 let dshHome = ''
+let wallpaperCheckStarted = false
 
 // ---- single instance -------------------------------------------------------
 
@@ -125,57 +160,59 @@ function removePath(target) {
 }
 
 /**
- * Ensure the built-in plugin exists in DSH_HOME and is resolvable by the dsh
- * loader. Runs at every launch; any manual removal is repaired on restart.
+ * Ensure the built-in plugins exist in DSH_HOME and are resolvable by the
+ * dsh loader. Runs at every launch; any manual removal is repaired on
+ * restart.
  */
 function installPlugin(resources) {
-  const pluginSrc = path.join(resources, 'plugins', ...PLUGIN_ID.split('/'))
-  const bundleRel = 'lib/client.js'
-  const bundledBundle = path.join(pluginSrc, bundleRel)
-  if (!fs.existsSync(bundledBundle)) {
-    throw new Error(`built-in plugin bundle missing: ${bundledBundle}`)
-  }
-
-  // 1. Persistent copy under $DSH_HOME/plugins (same pattern as the official
-  //    installer), refreshed only when the bundled version changes.
-  const pluginDest = path.join(dshHome, 'plugins', ...PLUGIN_ID.split('/'))
-  const installedBundle = path.join(pluginDest, bundleRel)
-  const bundledSize = fs.statSync(bundledBundle).size
-  const installedSize = fs.existsSync(installedBundle) ? fs.statSync(installedBundle).size : -1
-  if (installedSize !== bundledSize) {
-    appendLog(`installing built-in plugin into ${pluginDest}`)
-    removePath(pluginDest)
-    copyDir(pluginSrc, pluginDest)
-  }
-
-  // 2. Module fallback link the dsh loader resolves through:
-  //    $DSH_HOME/profiles/node_modules/@deepseek-ai/dsh-client-ui-aqua
-  const linkPath = path.join(dshHome, 'profiles', 'node_modules', ...PLUGIN_ID.split('/'))
-  fs.mkdirSync(path.dirname(linkPath), { recursive: true })
-
-  const wants = path.resolve(pluginDest)
-  let existing
-  try {
-    existing = fs.lstatSync(linkPath)
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error
-    existing = undefined
-  }
-
-  if (existing !== undefined && existing.isSymbolicLink()) {
-    try {
-      const target = path.resolve(fs.readlinkSync(linkPath))
-      if (target === wants) return
-    } catch {
-      // dangling link — replace below
+  for (const plugin of BUILTIN_PLUGINS) {
+    const pluginSrc = path.join(resources, 'plugins', ...plugin.id.split('/'))
+    const bundledBundle = path.join(pluginSrc, plugin.bundle)
+    if (!fs.existsSync(bundledBundle)) {
+      throw new Error(`built-in plugin bundle missing: ${bundledBundle}`)
     }
-    fs.unlinkSync(linkPath)
-  } else if (existing !== undefined) {
-    // A plain directory/file from an older install: replace it.
-    removePath(linkPath)
+
+    // 1. Persistent copy under $DSH_HOME/plugins (same pattern as the
+    //    official installer), refreshed only when the bundled version changes.
+    const pluginDest = path.join(dshHome, 'plugins', ...plugin.id.split('/'))
+    const installedBundle = path.join(pluginDest, plugin.bundle)
+    const bundledSize = fs.statSync(bundledBundle).size
+    const installedSize = fs.existsSync(installedBundle) ? fs.statSync(installedBundle).size : -1
+    if (installedSize !== bundledSize) {
+      appendLog(`installing built-in plugin into ${pluginDest}`)
+      removePath(pluginDest)
+      copyDir(pluginSrc, pluginDest)
+    }
+
+    // 2. Module fallback link the dsh loader resolves through:
+    //    $DSH_HOME/profiles/node_modules/<plugin id>
+    const linkPath = path.join(dshHome, 'profiles', 'node_modules', ...plugin.id.split('/'))
+    fs.mkdirSync(path.dirname(linkPath), { recursive: true })
+
+    const wants = path.resolve(pluginDest)
+    let existing
+    try {
+      existing = fs.lstatSync(linkPath)
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+      existing = undefined
+    }
+
+    if (existing !== undefined && existing.isSymbolicLink()) {
+      try {
+        const target = path.resolve(fs.readlinkSync(linkPath))
+        if (target === wants) continue
+      } catch {
+        // dangling link — replace below
+      }
+      fs.unlinkSync(linkPath)
+    } else if (existing !== undefined) {
+      // A plain directory/file from an older install: replace it.
+      removePath(linkPath)
+    }
+    fs.symlinkSync(wants, linkPath, 'junction')
+    appendLog(`plugin link ready: ${linkPath} -> ${wants}`)
   }
-  fs.symlinkSync(wants, linkPath, 'junction')
-  appendLog(`plugin link ready: ${linkPath} -> ${wants}`)
 }
 
 // ---- port selection ---------------------------------------------------------
@@ -195,21 +232,87 @@ function isPortFree(port) {
   })
 }
 
-function pickFreePort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer()
-    server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address()
-      const port = typeof address === 'object' && address !== null ? address.port : 0
-      server.close(() => resolve(port))
-    })
-  })
+/**
+ * PIDs currently listening on a TCP port (Windows netstat output).
+ */
+function pidsOnPort(port) {
+  try {
+    const out = spawnSync('netstat', ['-ano', '-p', 'tcp'], { windowsHide: true, encoding: 'utf8' })
+    if (out.status !== 0) return []
+    const pids = new Set()
+    for (const line of String(out.stdout).split(/\r?\n/)) {
+      const match = line.match(/\s(\d+\.\d+\.\d+\.\d+):(\d+)\s+\S+:\S+\s+LISTENING\s+(\d+)/)
+      if (match !== null && match[2] === String(port)) pids.add(Number(match[3]))
+    }
+    return [...pids]
+  } catch {
+    return []
+  }
 }
 
+/**
+ * Whether a PID is one of this app's own orphaned dsh servers: its command
+ * line must reference the bundled dsh bin and the same port.
+ */
+function isOwnServerPid(pid, port) {
+  try {
+    const script = `Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}" | Select-Object -ExpandProperty CommandLine`
+    const out = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], {
+      windowsHide: true,
+      encoding: 'utf8',
+      timeout: 8000,
+    })
+    const line = String(out.stdout || '')
+    return line.includes('@deepseek-ai\\dsh\\lib\\bin.js') && line.includes(`--port ${port}`)
+  } catch {
+    return false
+  }
+}
+
+function killPid(pid) {
+  try {
+    spawnSync('taskkill', ['/pid', String(pid), '/t', '/f'], { windowsHide: true })
+  } catch {
+    // ignore
+  }
+}
+
+async function waitPortFree(port, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await isPortFree(port)) return true
+    await new Promise((resolve) => setTimeout(resolve, 300))
+  }
+  return isPortFree(port)
+}
+
+/**
+ * Pick the server port. The default port is preferred so the web origin
+ * (and therefore localStorage / IndexedDB, which the Aqua wallpaper relies
+ * on) stays stable across launches. If the default port is occupied by one
+ * of our own orphaned servers (from a previous crash or force-kill), that
+ * orphan is terminated and the port reclaimed. Only an unrelated external
+ * process triggers the deterministic fallback range.
+ */
 async function pickPort() {
   if (await isPortFree(DEFAULT_PORT)) return DEFAULT_PORT
-  return pickFreePort()
+
+  appendLog(`port ${DEFAULT_PORT} is busy; looking for orphaned Harness Desktop servers`)
+  for (const pid of pidsOnPort(DEFAULT_PORT)) {
+    if (isOwnServerPid(pid, DEFAULT_PORT)) {
+      appendLog(`killing orphaned server pid ${pid} on port ${DEFAULT_PORT}`)
+      killPid(pid)
+    }
+  }
+  if (await waitPortFree(DEFAULT_PORT)) {
+    appendLog(`port ${DEFAULT_PORT} reclaimed`)
+    return DEFAULT_PORT
+  }
+
+  for (let port = DEFAULT_PORT + 1; port < DEFAULT_PORT + 100; port += 1) {
+    if (await isPortFree(port)) return port
+  }
+  throw new Error(`no free port found in range ${DEFAULT_PORT}–${DEFAULT_PORT + 99}`)
 }
 
 // ---- dsh server -------------------------------------------------------------
@@ -267,14 +370,14 @@ async function startServer(resources) {
     const text = String(data).trim()
     if (text !== '') {
       appendLog(`[server] ${text}`)
-      console.log(`[server] ${text}`)
+      safeLog('log', `[server] ${text}`)
     }
   }
   const onStderr = (data) => {
     const text = String(data).trim()
     if (text !== '') {
       appendLog(`[server:err] ${text}`)
-      console.error(`[server:err] ${text}`)
+      safeLog('error', `[server:err] ${text}`)
     }
   }
   serverChild.stdout.on('data', onStdout)
@@ -350,16 +453,46 @@ function createWindow() {
   })
 
   mainWindow.webContents.on('did-finish-load', () => {
-    if (!SMOKE) return
     const current = mainWindow.webContents.getURL()
-    if (!current.startsWith(`http://127.0.0.1:${chosenPort}`)) return
-    void runSmokeCheck()
+    if (current.startsWith(`http://127.0.0.1:${chosenPort}`)) {
+      injectArchivePanel()
+      if (SMOKE) void runSmokeCheck()
+      if (ARCHIVE_CHECK) void runArchiveCheck()
+      if (WALLPAPER_CHECK && !wallpaperCheckStarted) {
+        wallpaperCheckStarted = true
+        void runWallpaperCheck()
+      }
+      if (WALLPAPER_SEED && !wallpaperCheckStarted) {
+        wallpaperCheckStarted = true
+        void runWallpaperSeed()
+      }
+    }
   })
 
   mainWindow.on('closed', () => {
     mainWindow = null
   })
   return mainWindow
+}
+
+/**
+ * Inject the built-in "恢复归档" manager into the official dsh web UI. The
+ * panel talks to the bundled desktop-archive host plugin over same-origin
+ * `/api/desktop-archive.*` endpoints; the official UI code is never touched.
+ */
+function injectArchivePanel() {
+  if (mainWindow === null) return
+  const resources = resourceRoot()
+  const panelPath = path.join(resources, 'archive-panel.js')
+  if (!fs.existsSync(panelPath)) {
+    appendLog(`archive panel script missing: ${panelPath}`)
+    return
+  }
+  const script = fs.readFileSync(panelPath, 'utf8')
+  mainWindow.webContents
+    .executeJavaScript(script, true)
+    .then(() => appendLog('archive panel injected'))
+    .catch((error) => appendLog(`archive panel injection failed: ${error && error.message ? error.message : String(error)}`))
 }
 
 async function runSmokeCheck() {
@@ -378,19 +511,185 @@ async function runSmokeCheck() {
         check();
       });
       const aquaActive = document.documentElement.getAttribute('data-dsh-aqua') !== null;
-      return { hasAqua, mounted, aquaActive, title: document.title };
+      return {
+        hasAqua,
+        mounted,
+        aquaActive,
+        title: document.title,
+        bodyText: document.body.innerText.slice(0, 300),
+      };
     })()`)
-    console.log(`SMOKE_RESULT ${JSON.stringify(result)}`)
+    safeLog('log', `SMOKE_RESULT ${JSON.stringify(result)}`)
+    try {
+      const dir = path.join(app.getPath('userData'), 'logs')
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'smoke-result.json'), JSON.stringify(result, null, 2))
+    } catch {
+      // diagnostics only
+    }
     const shotPath = argAfter('--shot')
     if (shotPath !== undefined && result.mounted) {
       const image = await mainWindow.webContents.capturePage()
       fs.writeFileSync(shotPath, image.toPNG())
-      console.log(`SMOKE_SHOT ${shotPath}`)
+      safeLog('log', `SMOKE_SHOT ${shotPath}`)
     }
     stopServer()
     app.exit(result.hasAqua && result.mounted ? 0 : 1)
   } catch (error) {
-    console.error(`SMOKE_FAILED ${error && error.stack ? error.stack : String(error)}`)
+    safeLog('error', `SMOKE_FAILED ${error && error.stack ? error.stack : String(error)}`)
+    stopServer()
+    app.exit(1)
+  }
+}
+
+/**
+ * Self-check for the built-in archive manager: exercises list / restore /
+ * delete against the bundled host plugin through the live web UI. Used by
+ * the developer smoke pipeline with a throwaway DSH_HOME only.
+ */
+async function runArchiveCheck() {
+  try {
+    const result = await mainWindow.webContents.executeJavaScript(`(async () => {
+      const call = async (path, body) => {
+        const response = await fetch(path, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body || {}),
+        })
+        return { status: response.status, data: await response.json() }
+      }
+      const list1 = await call('/api/desktop-archive.list', {})
+      const restore = await call('/api/desktop-archive.restore', { sessionIds: ['session-test-1'] })
+      const list2 = await call('/api/desktop-archive.list', {})
+      const del = await call('/api/desktop-archive.delete', { sessionIds: ['session-test-2'] })
+      const list3 = await call('/api/desktop-archive.list', {})
+      const panel = document.getElementById('hd-archive-root') !== null
+      return { list1, restore, list2, del, list3, panel }
+    })()`)
+    safeLog('log', `ARCHIVE_RESULT ${JSON.stringify(result)}`)
+    try {
+      const dir = path.join(app.getPath('userData'), 'logs')
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'archive-check.json'), JSON.stringify(result, null, 2))
+    } catch {
+      // diagnostics only
+    }
+    stopServer()
+    app.exit(0)
+  } catch (error) {
+    safeLog('error', `ARCHIVE_FAILED ${error && error.stack ? error.stack : String(error)}`)
+    stopServer()
+    app.exit(1)
+  }
+}
+
+/**
+ * Self-check for the Aqua wallpaper persistence fix. Sets an image wallpaper
+ * (localStorage data URL) and a video wallpaper (IndexedDB blob marker),
+ * reloads the web UI, then verifies both are restored automatically without
+ * any user interaction. Uses a throwaway userData only.
+ */
+/** Seed persisted wallpaper state (image data URL + video blob marker) and
+ *  exit. A separate fresh launch then verifies both restore automatically —
+ *  exactly the user's close-and-reopen scenario. */
+async function runWallpaperSeed() {
+  try {
+    const kind = WALLPAPER_SEED_KIND
+    const seeded = await mainWindow.webContents.executeJavaScript(`(async () => {
+      const waitFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      const root = document.getElementById('root')
+      const t0 = Date.now()
+      while (root === null || root.children.length === 0) {
+        if (Date.now() - t0 > 45000) break
+        await waitFor(250)
+      }
+      localStorage.setItem('dsh.ui-aqua.background', 'wallpaper')
+      let seeded = {}
+      if (${JSON.stringify(kind)} === 'video') {
+        const db = await new Promise((resolve, reject) => {
+          const request = indexedDB.open('dsh-aqua-media', 1)
+          request.onupgradeneeded = () => {
+            if (!request.result.objectStoreNames.contains('wallpaper')) request.result.createObjectStore('wallpaper')
+          }
+          request.onsuccess = () => resolve(request.result)
+          request.onerror = () => reject(request.error)
+        })
+        const blob = new Blob(['fakemedia'], { type: 'video/mp4' })
+        const videoId = 'vtest' + Date.now().toString(36)
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction('wallpaper', 'readwrite')
+          tx.objectStore('wallpaper').put(blob, videoId)
+          tx.oncomplete = resolve
+          tx.onerror = () => reject(tx.error)
+        })
+        localStorage.setItem('dsh.ui-aqua.wallpaper', 'idb:' + videoId)
+        seeded.videoId = videoId
+      } else {
+        localStorage.setItem('dsh.ui-aqua.wallpaper', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==')
+      }
+      seeded.wallpaper = localStorage.getItem('dsh.ui-aqua.wallpaper')
+      return seeded
+    })()`)
+    safeLog('log', `WALLPAPER_SEED ${JSON.stringify(seeded)}`)
+    try {
+      const dir = path.join(app.getPath('userData'), 'logs')
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'wallpaper-seed.json'), JSON.stringify(seeded, null, 2))
+    } catch {
+      // diagnostics only
+    }
+    stopServer()
+    app.exit(0)
+  } catch (error) {
+    safeLog('error', `WALLPAPER_FAILED ${error && error.stack ? error.stack : String(error)}`)
+    stopServer()
+    app.exit(1)
+  }
+}
+
+/** Verify persisted wallpaper state restores automatically on a fresh boot. */
+async function runWallpaperCheck() {
+  try {
+    const result = await mainWindow.webContents.executeJavaScript(`(async () => {
+      const waitFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      const t0 = Date.now()
+      const img = () => document.querySelector('[data-dsh-aqua-wallpaper-img]')
+      const video = () => document.querySelector('[data-dsh-aqua-wallpaper-video]')
+      const marker = localStorage.getItem('dsh.ui-aqua.wallpaper') || ''
+      const expectVideo = marker.startsWith('idb:') || marker.startsWith('fsa:')
+      let passed = false
+      while (Date.now() - t0 < 45000) {
+        passed = expectVideo
+          ? video() !== null && String(video().getAttribute('src')).startsWith('blob:')
+          : img() !== null && String(img().getAttribute('src')).startsWith('data:image/png')
+        if (passed) break
+        await waitFor(250)
+      }
+      return {
+        passed,
+        storedWallpaper: localStorage.getItem('dsh.ui-aqua.wallpaper'),
+        storedBackground: localStorage.getItem('dsh.ui-aqua.background'),
+        aquaAttr: document.documentElement.getAttribute('data-dsh-aqua'),
+        hasAmbient: document.querySelector('[data-dsh-aqua-ambient]') !== null,
+        hasWallpaperLayer: document.querySelector('[data-dsh-aqua-wallpaper-layer]') !== null,
+        expectVideo,
+        imageSrc: img() === null ? null : String(img().getAttribute('src')).slice(0, 30),
+        videoSrc: video() === null ? null : String(video().getAttribute('src')).slice(0, 30),
+        aquaWallpaperOn: document.documentElement.hasAttribute('data-dsh-aqua-wallpaper'),
+      }
+    })()`)
+    safeLog('log', `WALLPAPER_RESULT ${JSON.stringify(result)}`)
+    try {
+      const dir = path.join(app.getPath('userData'), 'logs')
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'wallpaper-check.json'), JSON.stringify(result, null, 2))
+    } catch {
+      // diagnostics only
+    }
+    stopServer()
+    app.exit(result.passed === true ? 0 : 1)
+  } catch (error) {
+    safeLog('error', `WALLPAPER_FAILED ${error && error.stack ? error.stack : String(error)}`)
     stopServer()
     app.exit(1)
   }

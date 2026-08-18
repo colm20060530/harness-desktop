@@ -134,7 +134,28 @@ if (Test-Path (Join-Path $localPlugin 'lib\client.js')) {
         Copy-Item (Join-Path $inner.FullName 'LICENSE') $pluginDest -Force
     }
 }
+
+# Apply the Harness Desktop wallpaper-persistence patch (idb blob store) so a
+# freshly downloaded bundle behaves identically to the committed one.
+$nodeExeForPatch = Join-Path $resources 'node\node.exe'
+$patchScript = Join-Path $desktopRoot 'scripts\patch-aqua-wallpaper.mjs'
+if (Test-Path $nodeExeForPatch -and (Test-Path (Join-Path $pluginDest 'lib\client.js'))) {
+    & $nodeExeForPatch $patchScript (Join-Path $pluginDest 'lib\client.js')
+    if ($LASTEXITCODE -ne 0) { throw "aqua wallpaper patch failed (exit $LASTEXITCODE)" }
+} else {
+    Write-Host '  skipping wallpaper patch (node runtime missing; bundle is used as-is)' -ForegroundColor Yellow
+}
 Write-Host "  plugin bundle: $(Get-Item (Join-Path $pluginDest 'lib\client.js')).Length bytes" -ForegroundColor Green
+
+# ---- 4. built-in desktop archive plugin (checked in, no download) ---------------
+Write-Host '[4/4] desktop archive plugin' -ForegroundColor Cyan
+$archiveDest = Join-Path $resources 'plugins\@deepseek-ai\dsh-desktop-archive'
+Assert-PathUnderRoot $archiveDest $resources 'archive plugin destination'
+$archiveBundle = Join-Path $archiveDest 'lib\index.js'
+if (-not (Test-Path $archiveBundle)) {
+    throw "desktop archive plugin bundle missing: $archiveBundle (it is checked into desktop/resources/plugins)"
+}
+Write-Host "  archive plugin bundle: $(Get-Item $archiveBundle).Length bytes" -ForegroundColor Green
 
 Write-Host ''
 Write-Host 'Resources ready. Run `npm start` to launch, or `npm run pack` to build installers.' -ForegroundColor Green

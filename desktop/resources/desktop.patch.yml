@@ -1,0 +1,17 @@
+# Harness Desktop built-in plugin overlay.
+#
+# This file is applied on every launch via `dsh web --patch <this file>`, so
+# the built-in plugins are always present in the desktop app's composition.
+# It is never written into the user's own cordis.patch.yml, which means
+# official `dsh web` (run outside this app) stays completely stock.
+#
+# The modules are made resolvable by the desktop launcher, which keeps
+# self-healing links at:
+#   $DSH_HOME/profiles/node_modules/@deepseek-ai/dsh-client-ui-aqua
+#   $DSH_HOME/profiles/node_modules/@deepseek-ai/dsh-desktop-archive
+#
+- insert:
+    - id: ui-aqua
+      name: '@deepseek-ai/dsh-client-ui-aqua'
+    - id: desktop-archive
+      name: '@deepseek-ai/dsh-desktop-archive'
