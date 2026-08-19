@@ -4,6 +4,8 @@ Harness Desktop 是一个全新独立构建的 Windows 桌面客户端：它以 
 
 说明：本项目不是 DeepSeek 官方出品，而是个人开发者基于官方开源项目二次构建的桌面封装。核心引擎 100% 来自官方开源代码，未改动官方功能，仅在其上增加「桌面化封装 + 内置主题」能力。
 
+v3.0 起新增**内置视觉识别能力**：DeepSeek 等纯文本模型开箱即可识别图片，无需手动安装任何技能。
+
 [![GitHub Release](https://img.shields.io/github/v/release/colm20060530/harness-desktop)](https://github.com/colm20060530/harness-desktop/releases)
 [![License](https://img.shields.io/github/license/colm20060530/harness-desktop)](LICENSE)
 
@@ -12,22 +14,23 @@ Harness Desktop 是一个全新独立构建的 Windows 桌面客户端：它以 
 ## 目录
 
 1. [项目特色](#项目特色)
-2. [功能特性](#功能特性)
-3. [系统要求](#系统要求)
-4. [适用人群](#适用人群)
-5. [下载与安装](#下载与安装)
-6. [快速开始](#快速开始)
-7. [接入免费模型（示例一：Agnes AI）](#接入免费模型示例一agnes-ai)
-8. [接入免费模型（示例二：智谱 GLM）](#接入免费模型示例二智谱-glm)
-9. [数据与配置（含备份）](#数据与配置含备份)
-10. [从源码构建](#从源码构建)
-11. [项目结构](#项目结构)
-12. [工作原理](#工作原理)
-13. [自定义与打造你的专属桌面端](#自定义与打造你的专属桌面端)
-14. [常见问题 FAQ](#常见问题-faq)
-15. [支持作者](#支持作者)
-16. [许可证与致谢](#许可证与致谢)
-17. [版本发布](#版本发布)
+2. [内置视觉能力（v3.0 主打）](#内置视觉能力v30-主打)
+3. [功能特性](#功能特性)
+4. [系统要求](#系统要求)
+5. [适用人群](#适用人群)
+6. [下载与安装](#下载与安装)
+7. [快速开始](#快速开始)
+8. [接入免费模型（示例一：Agnes AI）](#接入免费模型示例一agnes-ai)
+9. [接入免费模型（示例二：智谱 GLM）](#接入免费模型示例二智谱-glm)
+10. [数据与配置（含备份）](#数据与配置含备份)
+11. [从源码构建](#从源码构建)
+12. [项目结构](#项目结构)
+13. [工作原理](#工作原理)
+14. [自定义与打造你的专属桌面端](#自定义与打造你的专属桌面端)
+15. [常见问题 FAQ](#常见问题-faq)
+16. [支持作者](#支持作者)
+17. [许可证与致谢](#许可证与致谢)
+18. [版本发布](#版本发布)
 
 ---
 
@@ -81,6 +84,30 @@ Harness Desktop 不是简单的聊天机器人，而是任务型 AI 智能体，
 
 ---
 
+## 内置视觉能力（v3.0 主打）
+
+DeepSeek 系列是纯文本模型，官方 Web UI 无法直接识别图片。v3.0 起，Harness Desktop 把识图能力**完全内置**：DeepSeek 等纯文本模型也能像视觉模型一样直接“看图说话”，全程无需安装技能、无需命令行。
+
+### 开箱即用，无需安装任何技能
+
+- 应用内置 ds-vision-skill 识图技能，首次启动自动安装到应用数据目录（`dsh-home\skills\ds-vision-skill`），对用户完全透明；
+- 给 DeepSeek 发送图片后，应用自动把图片转成带本地文件路径的文字指令交给模型，模型随即调用内置技能完成识别；
+- **显示隔离**：对话界面只显示你发的图片和文字，后台识图指令不会出现在对话里，但会完整送达模型；
+- 图片内容不会发送给模型 API，识别完全本地驱动，隐私更安心。
+
+### 一键配置视觉 API（设置 → 模型）
+
+纯文本模型本身没有视觉，识图需要借助一个视觉模型的 API。v3.0 在「设置 → 模型」内置了「DeepSeek 识图配置」卡片：
+
+- 只需填入智谱 GLM 的视觉 API Key（[前往智谱开放平台获取](https://bigmodel.cn/usercenter/proj-mgmt/apikeys)），点击「保存」即可；
+- 该 Key **仅供内置识图技能识别图片使用**，不会出现在模型列表中，也不会被当作聊天模型调用——你的模型列表始终只有你自己配置的模型；
+- 保存后自动写入技能配置（`dsh-home\skills\ds-vision-skill\config.json`），**配置一次、永久生效**：重启、升级、再次配置（覆盖更新）都不受影响，之后识图不会再向你索要 Key；
+- 未配置 Key 时，发图仍会引导模型调用技能；配置后即可真正完成识别。
+
+> 想直接用 GLM 视觉模型聊天？那属于“接入聊天模型”，见[接入免费模型（示例二：智谱 GLM）](#接入免费模型示例二智谱-glm)，与本识图能力互不影响。
+
+---
+
 ## 功能特性
 
 | 类别 | 能力 |
@@ -93,7 +120,7 @@ Harness Desktop 不是简单的聊天机器人，而是任务型 AI 智能体，
 | 模型 | 默认 DeepSeek 官方模型；支持 OpenAI 兼容协议接入任意服务商 |
 | 扩展 | 插件化架构（Cordis），可安装插件、自定义命令与工具 |
 | UI | Aqua 玻璃拟态（内置、默认开启、不可卸载）、图片/视频壁纸重启自动恢复、浅色/深色/跟随系统主题 |
-| 识图 | 模型设置页内置 DeepSeek 识图提醒：可引导安装 ds-vision-skill，之后支持上传图片识别 |
+| 识图 | 内置 ds-vision-skill 识图技能，DeepSeek 等纯文本模型开箱即可识别图片；设置 → 模型 一键配置 GLM 视觉 Key；界面只显示图片与文字，图片内容不发给模型 API |
 
 ---
 
@@ -135,13 +162,13 @@ Harness Desktop 不是简单的聊天机器人，而是任务型 AI 智能体，
 
 | 文件 | 说明 |
 | --- | --- |
-| `Harness-Desktop-Setup-2.0.3.exe` | 安装版：向导安装、创建桌面/开始菜单快捷方式、可在「应用和功能」中卸载 |
+| `Harness-Desktop-Setup-3.0.0.exe` | 安装版：向导安装、创建桌面/开始菜单快捷方式、可在「应用和功能」中卸载 |
 
 Gitee 用户注意：Gitee Release 同步发布（[https://gitee.com/colm0530/harness-desktop/releases](https://gitee.com/colm0530/harness-desktop/releases)）。因 Gitee 单附件大小限制，安装包拆分为多个分卷上传，请下载全部分卷后按 Release 页说明合并（附 SHA-256 校验值）；GitHub Releases 提供免合并的完整版。
 
 ### 安装步骤
 
-1. 双击 `Harness-Desktop-Setup-2.0.3.exe`；
+1. 双击 `Harness-Desktop-Setup-3.0.0.exe`；
 2. 若出现 SmartScreen「Windows 已保护你的电脑」提示，点击「更多信息 → 仍要运行」（软件暂未做代码签名，属正常提示，见 [FAQ Q1](#常见问题-faq)）；
 3. 按向导选择安装目录（默认即可），勾选快捷方式；
 4. 点击安装并完成。
@@ -149,7 +176,7 @@ Gitee 用户注意：Gitee Release 同步发布（[https://gitee.com/colm0530/ha
 ### 静默安装（可选）
 
 ```powershell
-Harness-Desktop-Setup-2.0.3.exe /S /D=D:\HarnessDesktop
+Harness-Desktop-Setup-3.0.0.exe /S /D=D:\HarnessDesktop
 ```
 
 注意：`/D=` 后跟安装目录，且必须是命令行**最后一个参数**。
@@ -194,6 +221,10 @@ Harness-Desktop-Setup-2.0.3.exe /S /D=D:\HarnessDesktop
 
 AI 会规划步骤、调用工具（读写文件、执行命令）、检查结果、汇报进度，并把产出文件保存到工作目录。
 
+### 5. 配置图片识别（可选，DeepSeek 用户推荐）
+
+DeepSeek 是纯文本模型，默认不能直接看图。打开 设置 → 模型，在「DeepSeek 识图配置」卡片填入智谱 GLM 视觉 API Key 并保存（获取 Key：[智谱开放平台 API 密钥页](https://bigmodel.cn/usercenter/proj-mgmt/apikeys)），即可让 DeepSeek 识别你上传的图片。该 Key 仅用于内置识图技能，不会出现在模型列表中，也不影响你配置的任何聊天模型。
+
 ---
 
 ## 接入免费模型（示例一：Agnes AI）
@@ -237,7 +268,7 @@ Agnes AI 提供免费的多模态 API（文本/图像/视频）。下面演示�
 
 1. 打开智谱开放平台：<https://open.bigmodel.cn>；
 2. 注册并登录（手机号即可），按提示完成实名认证；
-3. 进入 API 密钥页面：<https://open.bigmodel.cn/usercenter/apikeys>；
+3. 进入 API 密钥页面：<https://bigmodel.cn/usercenter/proj-mgmt/apikeys>；
 4. 点击创建 API Key 并复制保存（格式为 `{ID}.{密钥}` 两段式，中间以英文句点分隔）。
 
 ### 添加服务商
@@ -382,9 +413,13 @@ harness-desktop/
 │   ├── resources/
 │   │   ├── desktop.patch.yml   # 内置插件注册覆盖层（源码）
 │   │   ├── archive-panel.js    # 右下角「恢复归档」管理面板（注入脚本）
+│   │   ├── model-vision-hint.js # 设置 → 模型 的识图 Key 配置卡片（注入脚本）
+│   │   ├── skills/ds-vision-skill/  # 内置识图技能（开箱即用，自动安装）
 │   │   └── plugins/            # 内置插件包（Aqua 主题 + 归档管理器）
 │   ├── scripts/
 │   │   ├── prepare-resources.ps1      # 准备 Node/dsh/插件运行时资源
+│   │   ├── patch-vision-skill.mjs     # 识图指令与界面显示隔离补丁
+│   │   ├── patch-client-vision-display.mjs # 对话界面优先显示原始图片补丁
 │   │   ├── patch-aqua-wallpaper.mjs   # 壁纸持久化 + rc.6 兼容补丁
 │   │   └── make-icon.ps1              # 生成应用图标
 │   └── build/icon.png          # 应用图标
@@ -525,6 +560,10 @@ my-plugin/
 
 桌面版使用独立的 `dsh-home` 数据目录，与官方 `~/.dsh` 完全隔离（见[数据与配置（含备份）](#数据与配置含备份)）。官方 Web UI 中的归档记录存在官方数据目录里，不会出现在桌面版的归档面板中；反过来，在桌面版内归档的对话，官方 `dsh web` 也看不到。如需在桌面版管理，请在桌面版内对会话执行归档，然后通过右下角「恢复归档」恢复或永久删除。
 
+**Q11：我用的 DeepSeek 等文本模型，发图片提示“不支持图片”怎么办？**
+
+v3.0 起该问题已彻底解决：应用内置 ds-vision-skill 识图技能并自动安装，不再拦截图片。只需打开 设置 → 模型，在「DeepSeek 识图配置」卡片填入 GLM 视觉 API Key（获取：[智谱开放平台](https://bigmodel.cn/usercenter/proj-mgmt/apikeys)）并保存，之后直接上传图片即可识别。图片内容不会发送给模型 API，配置一次永久生效。
+
 ---
 
 ## 支持作者
@@ -551,6 +590,35 @@ my-plugin/
 ---
 
 ## 版本发布
+
+### v3.0.0（2026-08-19）
+
+大版本更新：**内置视觉能力（DeepSeek 识图）** 正式发布。
+
+新增（识图能力完全内置）：
+
+- **技能内置**：ds-vision-skill 随应用自动安装到数据目录，DeepSeek 等纯文本模型开箱即可识别图片，无需手动安装技能；
+- **一键配置**：设置 → 模型 新增「DeepSeek 识图配置」卡片，填入智谱 GLM 视觉 API Key 即保存（附官方获取链接）；该 Key 仅用于识图技能，不会出现在模型列表，也不影响用户自配的聊天模型；
+- **显示隔离**：发图后对话界面只显示图片与文字，后台识图指令自动隐藏但完整送达模型，图片内容不发给模型 API；
+- **自动同步**：视觉 Key 保存后自动写入内置技能配置，重启 / 升级 / 覆盖更新均永久生效；凭据清除时技能配置同步清空；
+- **迁移清理**：自动移除旧版误种的 GLM 聊天供应商，模型选择列表保持纯净，只保留用户自己配置的模型。
+
+- 安装包：`Harness-Desktop-Setup-3.0.0.exe`（约 195 MB，含内置视频壁纸）；
+- 发布地址：<https://github.com/colm20060530/harness-desktop/releases/tag/v3.0.0>；
+- Gitee 同步发布：<https://gitee.com/colm0530/harness-desktop/releases>（分卷上传，见 Release 页说明）。
+
+### v2.0.4（2026-08-18）
+
+修复（文本模型识图通道）：
+
+- 此前给 DeepSeek 等纯文本模型发送图片会被「当前模型不支持图片」拦截，消息无法送达；本次修复后不再拦截；
+- 文本模型收到图片时，应用会自动把图片转换为带附件文件路径的文字指令，并提示模型调用 ds-vision-skill 等本地视觉/OCR 技能识别图片，图片内容不会发送给模型 API；
+- 支持图片的视觉模型（如 GLM 视觉版）行为保持不变，仍直接传图；
+- 该修复对所有文本模型通用（DeepSeek、Agnes、智谱文本版等），并在每次构建时自动应用。
+
+- 安装包：`Harness-Desktop-Setup-2.0.4.exe`（约 195 MB，含内置视频壁纸）；
+- 发布地址：<https://github.com/colm20060530/harness-desktop/releases/tag/v2.0.4>；
+- Gitee 同步发布：<https://gitee.com/colm0530/harness-desktop/releases>（分卷上传，见 Release 页说明）。
 
 ### v2.0.3（2026-08-18）
 

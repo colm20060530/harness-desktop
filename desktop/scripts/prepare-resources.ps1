@@ -96,6 +96,28 @@ if (-not $SkipHost) {
     } else {
         Write-Host "  dsh CLI installed (native verify skipped: no bundled node yet)" -ForegroundColor Yellow
     }
+
+    # Apply the vision-skill admission patch so images sent to text-only
+    # models are routed to the local vision skill instead of being rejected.
+    $apiProxy = Join-Path $hostDir 'node_modules\@deepseek-ai\dsh-host-apiproxy\lib\index.js'
+    if ((Test-Path $nodeExe) -and (Test-Path $apiProxy)) {
+        Write-Host '  applying vision-skill admission patch...' -ForegroundColor DarkGray
+        & $nodeExe (Join-Path $desktopRoot 'scripts\patch-vision-skill.mjs') $apiProxy
+        if ($LASTEXITCODE -ne 0) { throw "vision-skill patch failed (exit $LASTEXITCODE)" }
+    } else {
+        Write-Host '  skipping vision-skill patch (node runtime missing)' -ForegroundColor Yellow
+    }
+
+    # Apply the client conversation display patch so the ds-vision-skill
+    # directive stays out of the chat while the user's own image is shown.
+    $conversationClient = Join-Path $hostDir 'node_modules\@deepseek-ai\dsh-client-ui-conversation\lib\client.js'
+    if ((Test-Path $nodeExe) -and (Test-Path $conversationClient)) {
+        Write-Host '  applying client vision-display patch...' -ForegroundColor DarkGray
+        & $nodeExe (Join-Path $desktopRoot 'scripts\patch-client-vision-display.mjs') $conversationClient
+        if ($LASTEXITCODE -ne 0) { throw "client vision-display patch failed (exit $LASTEXITCODE)" }
+    } else {
+        Write-Host '  skipping client vision-display patch (node runtime missing)' -ForegroundColor Yellow
+    }
 } else {
     Write-Host '[2/3] dsh server runtime: skipped (-SkipHost)' -ForegroundColor DarkGray
 }
@@ -119,26 +141,36 @@ if (Test-Path (Join-Path $localPlugin 'lib\client.js')) {
 } else {
     $pluginZip     = Join-Path $env:TEMP 'dsh-client-ui-aqua.zip'
     $pluginExtract = Join-Path $env:TEMP 'dsh-client-ui-aqua-extract'
-    Write-Host '  downloading plugin source from GitHub...' -ForegroundColor DarkGray
-    Invoke-WebRequest 'https://github.com/WYH66666666/DSH-Transparent-UI-Plugin/archive/refs/heads/main.zip' -OutFile $pluginZip
-    if (Test-Path $pluginExtract) { Remove-Item $pluginExtract -Recurse -Force }
-    Expand-Archive $pluginZip -DestinationPath $pluginExtract -Force
-    $inner = Get-ChildItem $pluginExtract -Directory | Select-Object -First 1
-    if (-not $inner) { throw 'plugin zip contains no package directory' }
-    if (-not (Test-Path (Join-Path $inner.FullName 'lib\client.js'))) {
-        throw 'downloaded plugin has no prebuilt lib/client.js'
+    $downloaded = $false
+    try {
+        Write-Host '  downloading plugin source from GitHub...' -ForegroundColor DarkGray
+        Invoke-WebRequest 'https://github.com/WYH66666666/DSH-Transparent-UI-Plugin/archive/refs/heads/main.zip' -OutFile $pluginZip -TimeoutSec 120
+        $downloaded = $true
+    } catch {
+        Write-Host "  plugin download failed (${($_.Exception.Message)}); using bundled copy if present" -ForegroundColor Yellow
     }
-    Copy-Item (Join-Path $inner.FullName 'lib') (Join-Path $pluginDest 'lib') -Recurse -Force
-    # Upstream ships a redundant nested lib/lib copy (same entry files as the
-    # package root); drop it to keep the bundled plugin minimal.
-    $nestedLib = Join-Path $pluginDest 'lib\lib'
-    if (Test-Path $nestedLib) {
-        Remove-Item $nestedLib -Recurse -Force
-        Write-Host '  removed redundant nested lib/lib copy' -ForegroundColor DarkGray
-    }
-    Copy-Item (Join-Path $inner.FullName 'package.json') $pluginDest -Force
-    if (Test-Path (Join-Path $inner.FullName 'LICENSE')) {
-        Copy-Item (Join-Path $inner.FullName 'LICENSE') $pluginDest -Force
+    if ($downloaded) {
+        if (Test-Path $pluginExtract) { Remove-Item $pluginExtract -Recurse -Force }
+        Expand-Archive $pluginZip -DestinationPath $pluginExtract -Force
+        $inner = Get-ChildItem $pluginExtract -Directory | Select-Object -First 1
+        if (-not $inner) { throw 'plugin zip contains no package directory' }
+        if (-not (Test-Path (Join-Path $inner.FullName 'lib\client.js'))) {
+            throw 'downloaded plugin has no prebuilt lib/client.js'
+        }
+        Copy-Item (Join-Path $inner.FullName 'lib') (Join-Path $pluginDest 'lib') -Recurse -Force
+        # Upstream ships a redundant nested lib/lib copy (same entry files as the
+        # package root); drop it to keep the bundled plugin minimal.
+        $nestedLib = Join-Path $pluginDest 'lib\lib'
+        if (Test-Path $nestedLib) {
+            Remove-Item $nestedLib -Recurse -Force
+            Write-Host '  removed redundant nested lib/lib copy' -ForegroundColor DarkGray
+        }
+        Copy-Item (Join-Path $inner.FullName 'package.json') $pluginDest -Force
+        if (Test-Path (Join-Path $inner.FullName 'LICENSE')) {
+            Copy-Item (Join-Path $inner.FullName 'LICENSE') $pluginDest -Force
+        }
+    } elseif (-not (Test-Path (Join-Path $pluginDest 'lib\client.js'))) {
+        throw 'plugin download failed and no bundled plugin copy exists'
     }
 }
 

@@ -23,6 +23,7 @@ const { spawn, spawnSync } = require('node:child_process')
 const net = require('node:net')
 const fs = require('node:fs')
 const path = require('node:path')
+const crypto = require('node:crypto')
 
 // Read the app's own version from the packaged/working package.json so dev
 // launches report the real version too (app.getVersion() in dev mode returns
@@ -68,12 +69,14 @@ const UI_CHECK = process.argv.includes('--ui-check')
 const DEFAULTS_CHECK = process.argv.includes('--defaults-check')
 const SETTINGS_DUMP = process.argv.includes('--settings-dump')
 const UPDATE_CHECK = process.argv.includes('--update-check')
+const VISION_CHECK = process.argv.includes('--vision-check')
 let archiveRealStarted = false
 let archiveRealPhase = 0
 let archiveRealResult = {}
 let archiveRealDone = false
 let settingsDumpStarted = false
 let updateCheckStarted = false
+let visionCheckStarted = false
 
 /** Console output that can never take the app down (e.g. EPIPE when the
  *  parent console closes while a self-check is running). */
@@ -234,6 +237,116 @@ function installPlugin(resources) {
     }
     fs.symlinkSync(wants, linkPath, 'junction')
     appendLog(`plugin link ready: ${linkPath} -> ${wants}`)
+  }
+}
+
+// ---- built-in ds-vision-skill + GLM key sync --------------------------------
+
+const VISION_SKILL_ID = 'ds-vision-skill'
+const VISION_SKILL_CONFIG_FILE = 'config.json'
+const VISION_GLM_BASE_URL = 'https://open.bigmodel.cn/api/paas/v4'
+
+/**
+ * Ensure the built-in ds-vision-skill is discoverable by the harness:
+ *   - $DSH_HOME/skills/ds-vision-skill (the app-managed user root);
+ *   - ~/.agents/skills/ds-vision-skill when that agents home exists (it ranks
+ *     above the dsh root, so on machines with an existing ~/.agents copy the
+ *     app refreshes that copy too and the built-in version stays authoritative).
+ * config.json (the GLM key) is never overwritten during refresh.
+ */
+function installBuiltinSkill(resources) {
+  const bundled = path.join(resources, 'skills', VISION_SKILL_ID)
+  if (!fs.existsSync(path.join(bundled, 'SKILL.md'))) {
+    appendLog(`built-in vision skill missing: ${bundled}`)
+    return
+  }
+  const targets = [path.join(dshHome, 'skills', VISION_SKILL_ID)]
+  const agentsHome = path.join(app.getPath('home'), '.agents', 'skills')
+  if (fs.existsSync(agentsHome)) targets.push(path.join(agentsHome, VISION_SKILL_ID))
+  for (const target of targets) {
+    if (!fs.existsSync(target)) {
+      appendLog(`installing built-in vision skill into ${target}`)
+      copyDir(bundled, target)
+      continue
+    }
+    syncSkillFiles(bundled, target)
+  }
+}
+
+/** Refresh non-config skill files so app updates reach the installed copy. */
+function syncSkillFiles(src, dest) {
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const from = path.join(src, entry.name)
+    const to = path.join(dest, entry.name)
+    if (entry.name === VISION_SKILL_CONFIG_FILE) continue
+    if (entry.isDirectory()) {
+      syncSkillFiles(from, to)
+    } else if (entry.isFile()) {
+      fs.mkdirSync(path.dirname(to), { recursive: true })
+      const same = fs.existsSync(to) && fs.readFileSync(from).equals(fs.readFileSync(to))
+      if (!same) fs.copyFileSync(from, to)
+    }
+  }
+}
+
+/** Read the official credentials document ($DSH_HOME/.credentials.yaml). */
+function readCredentialsFile() {
+  const credsPath = path.join(dshHome, '.credentials.yaml')
+  if (!fs.existsSync(credsPath)) return {}
+  try {
+    const result = {}
+    for (const line of fs.readFileSync(credsPath, 'utf8').split(/\r?\n/)) {
+      const match = /^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$/.exec(line.trim())
+      if (match) result[match[1]] = match[2].trim().replace(/^["']|["']$/g, '')
+    }
+    return result
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Write the configured GLM vision key into the built-in ds-vision-skill's
+ * config.json so the skill never asks the user again. Runs at every launch
+ * and again whenever the credentials document changes.
+ */
+function syncVisionSkillConfig() {
+  try {
+    const creds = readCredentialsFile()
+    const key = creds.ZHIPU_API_KEY || creds.GLM_API_KEY || ''
+    // 凭据被清除时同样把技能配置清空,避免残留旧 Key。
+    const next = key === ''
+      ? '{}\n'
+      : JSON.stringify({ glm: { apiKey: key, baseUrl: VISION_GLM_BASE_URL } }, null, 2)
+    const homeSkill = path.join(dshHome, 'skills', VISION_SKILL_ID)
+    const writeIfNeeded = (dir) => {
+      if (!fs.existsSync(path.join(dir, 'SKILL.md'))) return
+      const configPath = path.join(dir, VISION_SKILL_CONFIG_FILE)
+      const current = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : ''
+      if (current !== next) {
+        fs.writeFileSync(configPath, next, 'utf8')
+        appendLog(key === ''
+          ? `vision skill GLM key cleared in ${dir}`
+          : `vision skill GLM key synced into ${dir}`)
+      }
+    }
+    writeIfNeeded(homeSkill)
+    const agentsSkill = path.join(app.getPath('home'), '.agents', 'skills', VISION_SKILL_ID)
+    writeIfNeeded(agentsSkill)
+  } catch (error) {
+    appendLog(`vision skill config sync failed: ${error && error.message ? error.message : String(error)}`)
+  }
+}
+
+/** Watch the credentials document so a key saved from 设置 → 模型 is synced. */
+function watchCredentialsSync() {
+  try {
+    fs.watch(dshHome, { persistent: false }, (eventType, filename) => {
+      if (filename !== undefined && String(filename).toLowerCase() !== '.credentials.yaml') return
+      setTimeout(syncVisionSkillConfig, 300)
+    })
+  } catch (error) {
+    appendLog(`credentials watcher unavailable: ${error && error.message ? error.message : String(error)}`)
   }
 }
 
@@ -531,6 +644,10 @@ function createWindow() {
         updateCheckStarted = true
         void runUpdateCheck()
       }
+      if (VISION_CHECK && !visionCheckStarted) {
+        visionCheckStarted = true
+        void runVisionCheck()
+      }
     }
   })
 
@@ -577,7 +694,7 @@ function injectDesktopUi() {
   // Self-checks other than --defaults-check use a throwaway profile; skip
   // the first-run defaults seed so its one-time page reload cannot interrupt
   // an in-flight check.
-  const skipDefaultsSeed = (SMOKE || ARCHIVE_CHECK || ARCHIVE_REAL_CHECK || WALLPAPER_CHECK || WALLPAPER_SEED || UI_CHECK || SETTINGS_DUMP || UPDATE_CHECK) && !DEFAULTS_CHECK
+  const skipDefaultsSeed = (SMOKE || ARCHIVE_CHECK || ARCHIVE_REAL_CHECK || WALLPAPER_CHECK || WALLPAPER_SEED || UI_CHECK || SETTINGS_DUMP || UPDATE_CHECK || VISION_CHECK) && !DEFAULTS_CHECK
   const scripts = ['archive-panel.js', 'model-vision-hint.js', 'update-check.js']
   if (!skipDefaultsSeed) scripts.push('defaults-seed.js')
   for (const name of scripts) {
@@ -1106,9 +1223,33 @@ async function runUiCheck() {
       const bubbleBgOn = getComputedStyle(bubble).backgroundColor
       document.documentElement.removeAttribute('data-dsh-aqua-wallpaper')
       document.documentElement.removeAttribute('data-dsh-aqua-media')
+      // Per-visit behavior: dismiss → close the settings dialog → reopen it.
+      // The hint must reappear (not just once per app session).
+      let perVisitReappear = false
+      if (hint !== null) {
+        const dismissBtn = hint.querySelector('.hd-vision-hint-close')
+        if (dismissBtn !== null) dismissBtn.click()
+      }
+      await waitFor(600)
+      dialog.remove()
+      await waitFor(800)
+      document.body.appendChild(dialog)
+      await waitFor(1200)
+      perVisitReappear = document.getElementById('hd-vision-hint') !== null
+      // Stability: the card must keep its DOM identity while the periodic
+      // scan runs (2s interval + status updates), i.e. never rebuild itself.
+      const stableNode = document.getElementById('hd-vision-hint')
+      let stable = true
+      const identityProbe = setInterval(() => {
+        if (document.getElementById('hd-vision-hint') !== stableNode) stable = false
+      }, 400)
+      await waitFor(2400)
+      clearInterval(identityProbe)
       return {
         hintFound: hint !== null,
         hintText: hint === null ? null : hint.textContent,
+        perVisitReappear,
+        stable,
         trajectoryBackdrop: trajStyle.backdropFilter,
         trajectoryBackground: trajStyle.backgroundColor,
         navBackdrop: navStyle.backdropFilter,
@@ -1141,7 +1282,7 @@ async function runUiCheck() {
       // diagnostics only
     }
     stopServer()
-    app.exit(result.hintFound === true ? 0 : 1)
+    app.exit(result.hintFound === true && result.perVisitReappear === true && result.stable === true ? 0 : 1)
   } catch (error) {
     safeLog('error', `UI_FAILED ${error && error.stack ? error.stack : String(error)}`)
     stopServer()
@@ -1350,6 +1491,185 @@ async function runUpdateCheck() {
   }
 }
 
+/**
+ * End-to-end self-check for the vision-skill admission patch: sends a real
+ * image attachment to the current (text-only) model and verifies the message
+ * is ACCEPTED and stored as a text placeholder naming the attachment file
+ * path (never rejected with MODEL_DOES_NOT_SUPPORT_IMAGES). Uses a throwaway
+ * DSH_HOME only; no model credentials are needed because the admission check
+ * happens before any LLM call. Requires an initialized DSH_HOME with at
+ * least one workspace/session (like archive-real-check, use a real-home copy
+ * in the developer smoke pipeline).
+ */
+async function runVisionCheck() {
+  try {
+    // Wait for the web UI and for the auto-created first session to exist.
+    await mainWindow.webContents.executeJavaScript(`(async () => {
+      const waitFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      const root = document.getElementById('root')
+      const t0 = Date.now()
+      while (root === null || root.children.length === 0) {
+        if (Date.now() - t0 > 45000) break
+        await waitFor(250)
+      }
+      await waitFor(1500)
+      return true
+    })()`)
+
+    const workspaceJsonPath = path.join(dshHome, 'storages', 'workspace.json')
+    let sessionId = null
+    const sessionDeadline = Date.now() + 20000
+    while (Date.now() < sessionDeadline) {
+      try {
+        const ws = JSON.parse(fs.readFileSync(workspaceJsonPath, 'utf8'))
+        const first = Object.values(ws.tables.workspaces)[0]
+        if (first && Array.isArray(first.sessionIds) && first.sessionIds.length > 0) {
+          sessionId = first.sessionIds[0]
+          break
+        }
+      } catch {
+        // workspace.json not ready yet
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    }
+    if (sessionId === null) throw new Error('no session id found in workspace.json')
+
+    const pngB64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+    const sendResult = await mainWindow.webContents.executeJavaScript(`(async () => {
+      const waitFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      const envelope = {
+        type: 'client-request',
+        rpcId: crypto.randomUUID(),
+        method: 'session.prompt',
+        payload: {
+          sessionId: ${JSON.stringify(sessionId)},
+          mode: 'queue',
+          content: [
+            { type: 'text', text: '请用 ds-vision-skill 识别这张测试图片并描述内容' },
+            { type: 'image', data: ${JSON.stringify(pngB64)}, mediaType: 'image/png', name: 'vision-test.png' },
+          ],
+        },
+      }
+      const response = await fetch('/api/session.prompt', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(envelope),
+      })
+      const responseText = await response.text()
+      let data = null
+      try {
+        data = JSON.parse(responseText)
+      } catch {
+        data = null
+      }
+      await waitFor(4000)
+      const bodyText = document.body.innerText || ''
+      const directiveVisible = bodyText.includes('用户上传了一张')
+      const blocked = bodyText.includes('请切换支持图片的模型')
+
+      // Inspect the stored user message: model-visible content must carry the
+      // ds-vision-skill directive (text only), while displayContent must keep
+      // the original image block for the chat UI.
+      const historyResponse = await fetch('/api/session.history', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          type: 'client-request',
+          rpcId: crypto.randomUUID(),
+          method: 'session.history',
+          payload: { sessionId: ${JSON.stringify(sessionId)}, maxMessages: 30 },
+        }),
+      })
+      let history = null
+      try {
+        history = await historyResponse.json()
+      } catch {
+        history = null
+      }
+      const events = history?.result?.ok === true ? history.result.value.events : []
+      const target = events.findLast((entry) =>
+        entry.event.type === 'user/message'
+        && Array.isArray(entry.event.data.content)
+        && entry.event.data.content.some((block) => block.type === 'text' && String(block.text || '').includes('用户上传了一张')))
+      const message = target?.event?.data || null
+      const contentTexts = Array.isArray(message?.content) ? message.content.filter((b) => b.type === 'text').map((b) => b.text || '') : []
+      const modelContentHasDirective = contentTexts.join('').includes('ds-vision-skill')
+      const displayImages = Array.isArray(message?.displayContent)
+        ? message.displayContent.filter((b) => b.type === 'image' && b.attachment !== void 0)
+        : []
+      const displayContentHasImage = displayImages.length > 0
+      const attachmentId = displayImages[0]?.attachment?.attachmentId || null
+
+      let attachmentLoadable = false
+      if (attachmentId !== null) {
+        const attachmentResponse = await fetch('/api/session.attachment', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            type: 'client-request',
+            rpcId: crypto.randomUUID(),
+            method: 'session.attachment',
+            payload: { sessionId: ${JSON.stringify(sessionId)}, attachmentId },
+          }),
+        })
+        try {
+          const attachmentData = await attachmentResponse.json()
+          attachmentLoadable = attachmentData?.result?.ok === true && typeof attachmentData.result.value.data === 'string'
+        } catch {
+          attachmentLoadable = false
+        }
+      }
+
+      return {
+        status: response.status,
+        data,
+        rawText: data === null ? responseText : null,
+        directiveVisible,
+        blocked,
+        modelContentHasDirective,
+        displayContentHasImage,
+        attachmentLoadable,
+        bodySnippet: bodyText.slice(0, 400),
+      }
+    })()`)
+
+    const accepted = sendResult.data?.result?.ok === true
+    const result = {
+      sessionId,
+      send: sendResult,
+      accepted,
+      attachmentOnDisk: false,
+      passed: false,
+    }
+    const sha = crypto.createHash('sha256').update(Buffer.from(pngB64, 'base64')).digest('hex')
+    const objectPath = path.join(dshHome, 'attachments', 'v1', 'objects', sha.slice(0, 2), sha)
+    result.attachmentOnDisk = fs.existsSync(objectPath)
+    result.passed =
+      accepted
+      && sendResult.modelContentHasDirective
+      && sendResult.displayContentHasImage
+      && sendResult.attachmentLoadable
+      && !sendResult.directiveVisible
+      && !sendResult.blocked
+      && result.attachmentOnDisk
+
+    safeLog('log', `VISION_RESULT ${JSON.stringify(result)}`)
+    try {
+      const dir = path.join(app.getPath('userData'), 'logs')
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'vision-check.json'), JSON.stringify(result, null, 2))
+    } catch {
+      // diagnostics only
+    }
+    stopServer()
+    app.exit(result.passed ? 0 : 1)
+  } catch (error) {
+    safeLog('error', `VISION_FAILED ${error && error.stack ? error.stack : String(error)}`)
+    stopServer()
+    app.exit(1)
+  }
+}
+
 /** Verify persisted wallpaper state restores automatically on a fresh boot. */
 async function runWallpaperCheck() {
   try {
@@ -1412,6 +1732,9 @@ async function boot() {
   const resources = resourceRoot()
   try {
     installPlugin(resources)
+    installBuiltinSkill(resources)
+    syncVisionSkillConfig()
+    watchCredentialsSync()
     const url = await startServer(resources)
     appendLog(`web UI ready at ${url}`)
     void win.loadURL(url)
