@@ -6,7 +6,7 @@ release/
 
 # desktop app
 desktop/node_modules/
-desktop/dist/
+desktop/dist*/
 desktop/resources/node/
 desktop/resources/host/
 desktop/*.log
@@ -14,3 +14,7 @@ desktop/*.log
 # npm / pnpm
 node_modules/
 *.log
+
+# runtime credentials — never commit real API keys
+desktop/resources/skills/*/config.json
+**/.credentials.yaml

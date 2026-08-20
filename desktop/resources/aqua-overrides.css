@@ -303,3 +303,56 @@ html[data-dsh-aqua] body[data-ds-dark-theme] {
   --dsw-alias-markdown-code-block: rgba(13, 20, 31, 0.56) !important;
   --dsw-alias-markdown-code-block-banner: rgba(18, 27, 41, 0.58) !important;
 }
+
+/* ============ 5. 原生下拉框 select：玻璃外观 + 选项文字常显 ============ */
+/* 覆盖「添加模型 → 选择提供商」「自定义供应商 → API 协议」等所有原生
+   下拉控件。收起状态是半透明玻璃（模糊随磨砂旋钮联动）；选项弹层文字
+   常显，不再出现“悬停才看得到字样”的问题。 */
+html[data-dsh-aqua][data-dsh-float] select {
+  appearance: none;
+  background-color: color-mix(in srgb, #ffffff calc(52% * var(--dsh-aqua-surface-frost, 1.2)), transparent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%2381858C' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px 12px;
+  padding-right: 32px;
+  -webkit-backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) + 4px)) saturate(150%);
+  backdrop-filter: blur(calc(var(--dsh-aqua-blur, 14px) + 4px)) saturate(150%);
+  border: 1px solid rgba(110, 155, 232, 0.35) !important;
+  color: #1d3556 !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.45), 0 6px 18px rgba(19, 45, 83, 0.12);
+}
+html[data-dsh-aqua][data-dsh-float] body[data-ds-dark-theme] select {
+  background-color: color-mix(in srgb, #232a36 calc(58% * var(--dsh-aqua-surface-frost, 1.2)), transparent);
+  border-color: rgba(148, 180, 220, 0.32) !important;
+  color: #e6f4ff !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.08), 0 6px 18px rgba(2, 6, 14, 0.4);
+}
+
+/* 兼容模式：只加磨砂与玻璃底色 */
+html[data-dsh-aqua][data-dsh-compat] select {
+  appearance: none;
+  background-color: color-mix(in srgb, #ffffff calc(56% * var(--dsh-aqua-frost, 1)), transparent);
+  backdrop-filter: blur(10px);
+  color: #1d3556 !important;
+}
+html[data-dsh-aqua][data-dsh-compat] body[data-ds-dark-theme] select {
+  background-color: color-mix(in srgb, #14181f calc(58% * var(--dsh-aqua-frost, 1)), transparent);
+  color: #e6f4ff !important;
+}
+
+/* 选项弹层：文字常显，不再依赖悬停 */
+html[data-dsh-aqua] select option,
+html[data-dsh-aqua] select optgroup {
+  background-color: #ffffff;
+  color: #1d3556;
+}
+html[data-dsh-aqua] body[data-ds-dark-theme] select option,
+html[data-dsh-aqua] body[data-ds-dark-theme] select optgroup {
+  background-color: #1c202a;
+  color: #e6f4ff;
+}
+html[data-dsh-aqua] select option:hover {
+  background-color: #6e9be8;
+  color: #ffffff;
+}

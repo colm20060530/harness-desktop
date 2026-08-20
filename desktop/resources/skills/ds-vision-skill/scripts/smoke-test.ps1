@@ -41,7 +41,7 @@ try {
 
 Write-Output ''
 Write-Output '### Docs'
-foreach ($doc in @('SKILL.md','README.md','references\channels.md','agents\openai.yaml')) {
+foreach ($doc in @('SKILL.md','README.md','references\channels.md','references\triggers.md','agents\openai.yaml')) {
     $path = Join-Path $root $doc
     if (Test-Path -LiteralPath $path) {
         Write-Output ("- {0}: OK" -f $doc)

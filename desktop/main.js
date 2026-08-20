@@ -23,6 +23,7 @@ const { spawn, spawnSync } = require('node:child_process')
 const net = require('node:net')
 const fs = require('node:fs')
 const path = require('node:path')
+const os = require('node:os')
 const crypto = require('node:crypto')
 
 // Read the app's own version from the packaged/working package.json so dev
@@ -70,6 +71,11 @@ const DEFAULTS_CHECK = process.argv.includes('--defaults-check')
 const SETTINGS_DUMP = process.argv.includes('--settings-dump')
 const UPDATE_CHECK = process.argv.includes('--update-check')
 const VISION_CHECK = process.argv.includes('--vision-check')
+const IMAGE_CHECK = process.argv.includes('--image-check')
+const IMAGE_CHECK_WORKSPACE = argAfter('--image-workspace')
+const SETUP_CHECK = process.argv.includes('--setup-check')
+const SETUP_CREDS = argAfter('--setup-creds')
+const SETUP_WORKSPACE = argAfter('--setup-workspace')
 let archiveRealStarted = false
 let archiveRealPhase = 0
 let archiveRealResult = {}
@@ -77,6 +83,8 @@ let archiveRealDone = false
 let settingsDumpStarted = false
 let updateCheckStarted = false
 let visionCheckStarted = false
+let imageCheckStarted = false
+let setupCheckStarted = false
 
 /** Console output that can never take the app down (e.g. EPIPE when the
  *  parent console closes while a self-check is running). */
@@ -240,32 +248,34 @@ function installPlugin(resources) {
   }
 }
 
-// ---- built-in ds-vision-skill + GLM key sync --------------------------------
+// ---- built-in skills + credential sync --------------------------------------
 
 const VISION_SKILL_ID = 'ds-vision-skill'
+const IMAGE_SKILL_ID = 'ds-image-skill'
 const VISION_SKILL_CONFIG_FILE = 'config.json'
 const VISION_GLM_BASE_URL = 'https://open.bigmodel.cn/api/paas/v4'
+const TOKENRHYTHM_BASE_URL = 'https://tokenrhythm.studio/v1'
 
 /**
- * Ensure the built-in ds-vision-skill is discoverable by the harness:
- *   - $DSH_HOME/skills/ds-vision-skill (the app-managed user root);
- *   - ~/.agents/skills/ds-vision-skill when that agents home exists (it ranks
+ * Ensure a built-in skill is discoverable by the harness:
+ *   - $DSH_HOME/skills/<skillId> (the app-managed user root);
+ *   - ~/.agents/skills/<skillId> when that agents home exists (it ranks
  *     above the dsh root, so on machines with an existing ~/.agents copy the
  *     app refreshes that copy too and the built-in version stays authoritative).
- * config.json (the GLM key) is never overwritten during refresh.
+ * config.json (runtime credentials) is never overwritten during refresh.
  */
-function installBuiltinSkill(resources) {
-  const bundled = path.join(resources, 'skills', VISION_SKILL_ID)
+function installBuiltinSkill(resources, skillId) {
+  const bundled = path.join(resources, 'skills', skillId)
   if (!fs.existsSync(path.join(bundled, 'SKILL.md'))) {
-    appendLog(`built-in vision skill missing: ${bundled}`)
+    appendLog(`built-in skill missing: ${bundled}`)
     return
   }
-  const targets = [path.join(dshHome, 'skills', VISION_SKILL_ID)]
+  const targets = [path.join(dshHome, 'skills', skillId)]
   const agentsHome = path.join(app.getPath('home'), '.agents', 'skills')
-  if (fs.existsSync(agentsHome)) targets.push(path.join(agentsHome, VISION_SKILL_ID))
+  if (fs.existsSync(agentsHome)) targets.push(path.join(agentsHome, skillId))
   for (const target of targets) {
     if (!fs.existsSync(target)) {
-      appendLog(`installing built-in vision skill into ${target}`)
+      appendLog(`installing built-in skill into ${target}`)
       copyDir(bundled, target)
       continue
     }
@@ -343,10 +353,118 @@ function watchCredentialsSync() {
   try {
     fs.watch(dshHome, { persistent: false }, (eventType, filename) => {
       if (filename !== undefined && String(filename).toLowerCase() !== '.credentials.yaml') return
-      setTimeout(syncVisionSkillConfig, 300)
+      setTimeout(() => {
+        syncVisionSkillConfig()
+        syncImageSkillConfig()
+      }, 300)
     })
   } catch (error) {
     appendLog(`credentials watcher unavailable: ${error && error.message ? error.message : String(error)}`)
+  }
+}
+
+/**
+ * Open generated images from the desktop main process.
+ *
+ * The image skill's PowerShell scripts run inside the harness sandbox, where
+ * ShellExecute reports success but viewer windows land in an invisible
+ * context. Instead the script drops a small marker JSON into
+ * %TEMP%\hd-image-open\<nonce>.json (the sandbox may write to %TEMP%) and this
+ * watcher opens the path with Electron's shell.openPath — the app's own
+ * interactive process — then removes the marker.
+ */
+function watchImageOpenRequests() {
+  try {
+    const dir = path.join(os.tmpdir(), 'hd-image-open')
+    fs.mkdirSync(dir, { recursive: true })
+
+    const openMarker = async (file, parsed) => {
+      try {
+        const target = String(parsed.path || '')
+        if (target !== '' && fs.existsSync(target)) {
+          const error = await shell.openPath(target)
+          if (error) appendLog(`open generated image failed: ${error}`)
+        }
+      } catch (error) {
+        appendLog(`open generated image error: ${error && error.message ? error.message : String(error)}`)
+      } finally {
+        try {
+          fs.unlinkSync(file)
+        } catch {
+          // marker already gone — fine
+        }
+      }
+    }
+
+    const processMarker = (file) => {
+      let parsed = null
+      try {
+        parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
+      } catch {
+        // File may still be mid-write; retry once shortly after.
+        setTimeout(() => {
+          try {
+            const retry = JSON.parse(fs.readFileSync(file, 'utf8'))
+            void openMarker(file, retry)
+          } catch {
+            try {
+              fs.unlinkSync(file)
+            } catch {
+              // stale marker — leave for next sweep
+            }
+          }
+        }, 600)
+        return
+      }
+      void openMarker(file, parsed)
+    }
+
+    // Handle markers left over from a previous session (e.g. app closed right
+    // after generation) before watching for new ones.
+    for (const name of fs.readdirSync(dir)) {
+      if (String(name).endsWith('.json')) processMarker(path.join(dir, name))
+    }
+    fs.watch(dir, { persistent: false }, (eventType, filename) => {
+      if (filename !== undefined && String(filename).endsWith('.json')) {
+        processMarker(path.join(dir, filename))
+      }
+    })
+    appendLog('generated-image opener watcher ready')
+  } catch (error) {
+    appendLog(`generated-image opener watcher unavailable: ${error && error.message ? error.message : String(error)}`)
+  }
+}
+
+/**
+ * Write the configured TokenRhythm key into the built-in ds-image-skill's
+ * config.json so the skill never asks the user again. Runs at every launch
+ * and again whenever the credentials document changes. Reuses the same key a
+ * TokenRhythm chat provider already stores (OPENSQUILLA_API_KEY) or the
+ * dedicated image key (TOKENRHYTHM_API_KEY); cleared credentials clear it too.
+ */
+function syncImageSkillConfig() {
+  try {
+    const creds = readCredentialsFile()
+    const key = creds.OPENSQUILLA_API_KEY || creds.TOKENRHYTHM_API_KEY || ''
+    const next = key === ''
+      ? '{}\n'
+      : JSON.stringify({ tokenrhythm: { apiKey: key, baseUrl: TOKENRHYTHM_BASE_URL } }, null, 2)
+    const writeIfNeeded = (dir) => {
+      if (!fs.existsSync(path.join(dir, 'SKILL.md'))) return
+      const configPath = path.join(dir, VISION_SKILL_CONFIG_FILE)
+      const current = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : ''
+      if (current !== next) {
+        fs.writeFileSync(configPath, next, 'utf8')
+        appendLog(key === ''
+          ? `image skill TokenRhythm key cleared in ${dir}`
+          : `image skill TokenRhythm key synced into ${dir}`)
+      }
+    }
+    writeIfNeeded(path.join(dshHome, 'skills', IMAGE_SKILL_ID))
+    const agentsSkill = path.join(app.getPath('home'), '.agents', 'skills', IMAGE_SKILL_ID)
+    writeIfNeeded(agentsSkill)
+  } catch (error) {
+    appendLog(`image skill config sync failed: ${error && error.message ? error.message : String(error)}`)
   }
 }
 
@@ -648,6 +766,14 @@ function createWindow() {
         visionCheckStarted = true
         void runVisionCheck()
       }
+      if (IMAGE_CHECK && !imageCheckStarted) {
+        imageCheckStarted = true
+        void runImageCheck()
+      }
+      if (SETUP_CHECK && !setupCheckStarted) {
+        setupCheckStarted = true
+        void runSetupCheck()
+      }
     }
   })
 
@@ -663,6 +789,7 @@ function createWindow() {
  *     bundled desktop-archive host plugin over same-origin
  *     `/api/desktop-archive.*` endpoints);
  *   - model-vision-hint.js: the DeepSeek 识图 reminder in 设置 → 模型.
+ *   - model-image-hint.js: the TokenRhythm 生图能力 card below it.
  *   - aqua-overrides.css: Aqua 玻璃补充覆盖（轨迹面板、设置选中态按钮）。
  * The official UI code is never modified.
  */
@@ -694,8 +821,8 @@ function injectDesktopUi() {
   // Self-checks other than --defaults-check use a throwaway profile; skip
   // the first-run defaults seed so its one-time page reload cannot interrupt
   // an in-flight check.
-  const skipDefaultsSeed = (SMOKE || ARCHIVE_CHECK || ARCHIVE_REAL_CHECK || WALLPAPER_CHECK || WALLPAPER_SEED || UI_CHECK || SETTINGS_DUMP || UPDATE_CHECK || VISION_CHECK) && !DEFAULTS_CHECK
-  const scripts = ['archive-panel.js', 'model-vision-hint.js', 'update-check.js']
+  const skipDefaultsSeed = (SMOKE || ARCHIVE_CHECK || ARCHIVE_REAL_CHECK || WALLPAPER_CHECK || WALLPAPER_SEED || UI_CHECK || SETTINGS_DUMP || UPDATE_CHECK || VISION_CHECK || IMAGE_CHECK || SETUP_CHECK) && !DEFAULTS_CHECK
+  const scripts = ['archive-panel.js', 'model-vision-hint.js', 'model-image-hint.js', 'update-check.js']
   if (!skipDefaultsSeed) scripts.push('defaults-seed.js')
   for (const name of scripts) {
     const scriptPath = path.join(resources, name)
@@ -1173,6 +1300,16 @@ async function runUiCheck() {
       settingsButton.className = 'x-secondaryButton'
       settingsButton.textContent = '按钮'
       settingsPanel.appendChild(settingsButton)
+      // Synthetic native select (provider / API-protocol dropdown).
+      const select = document.createElement('select')
+      select.className = 'x-select'
+      const optionA = document.createElement('option')
+      optionA.textContent = 'DeepSeek'
+      const optionB = document.createElement('option')
+      optionB.textContent = 'OpenAI'
+      select.appendChild(optionA)
+      select.appendChild(optionB)
+      settingsPanel.appendChild(select)
       settingsOverlay.appendChild(settingsMask)
       settingsOverlay.appendChild(settingsPanel)
       document.body.appendChild(settingsOverlay)
@@ -1185,6 +1322,7 @@ async function runUiCheck() {
       document.body.appendChild(bubble)
       await waitFor(1200)
       const hint = document.getElementById('hd-vision-hint')
+      const imageHint = document.getElementById('hd-image-hint')
       const trajStyle = getComputedStyle(split)
       const navStyle = getComputedStyle(navCell)
       const inlineStyle = getComputedStyle(inlineCode)
@@ -1193,6 +1331,8 @@ async function runUiCheck() {
       const panelStyle = getComputedStyle(settingsPanel)
       const maskStyle = getComputedStyle(settingsMask)
       const settingsButtonStyle = getComputedStyle(settingsButton)
+      const selectStyle = getComputedStyle(select)
+      const optionStyle = getComputedStyle(optionA)
       const bubbleStyle = getComputedStyle(bubble)
       const htmlMedia = document.documentElement.getAttribute('data-dsh-aqua-media')
       const htmlWallpaper = document.documentElement.hasAttribute('data-dsh-aqua-wallpaper')
@@ -1224,10 +1364,15 @@ async function runUiCheck() {
       document.documentElement.removeAttribute('data-dsh-aqua-wallpaper')
       document.documentElement.removeAttribute('data-dsh-aqua-media')
       // Per-visit behavior: dismiss → close the settings dialog → reopen it.
-      // The hint must reappear (not just once per app session).
+      // Both hints must reappear (not just once per app session).
       let perVisitReappear = false
+      let imageHintPerVisitReappear = false
       if (hint !== null) {
         const dismissBtn = hint.querySelector('.hd-vision-hint-close')
+        if (dismissBtn !== null) dismissBtn.click()
+      }
+      if (imageHint !== null) {
+        const dismissBtn = imageHint.querySelector('.hd-image-hint-close')
         if (dismissBtn !== null) dismissBtn.click()
       }
       await waitFor(600)
@@ -1235,13 +1380,19 @@ async function runUiCheck() {
       await waitFor(800)
       document.body.appendChild(dialog)
       await waitFor(1200)
-      perVisitReappear = document.getElementById('hd-vision-hint') !== null
-      // Stability: the card must keep its DOM identity while the periodic
-      // scan runs (2s interval + status updates), i.e. never rebuild itself.
-      const stableNode = document.getElementById('hd-vision-hint')
+      const reopenedVision = document.getElementById('hd-vision-hint')
+      const reopenedImage = document.getElementById('hd-image-hint')
+      perVisitReappear = reopenedVision !== null
+      imageHintPerVisitReappear = reopenedImage !== null
+      // Stability: the cards must keep their DOM identity while the periodic
+      // scan runs (2s interval + status updates), i.e. never rebuild themselves.
+      const stableNode = reopenedVision
+      const imageStableNode = reopenedImage
       let stable = true
+      let imageStable = true
       const identityProbe = setInterval(() => {
         if (document.getElementById('hd-vision-hint') !== stableNode) stable = false
+        if (document.getElementById('hd-image-hint') !== imageStableNode) imageStable = false
       }, 400)
       await waitFor(2400)
       clearInterval(identityProbe)
@@ -1250,6 +1401,11 @@ async function runUiCheck() {
         hintText: hint === null ? null : hint.textContent,
         perVisitReappear,
         stable,
+        imageHintFound: imageHint !== null,
+        imageHintText: imageHint === null ? null : imageHint.textContent,
+        imageHintAfterVision: reopenedImage !== null && reopenedVision !== null && reopenedImage.previousElementSibling === reopenedVision,
+        imageHintPerVisitReappear,
+        imageStable,
         trajectoryBackdrop: trajStyle.backdropFilter,
         trajectoryBackground: trajStyle.backgroundColor,
         navBackdrop: navStyle.backdropFilter,
@@ -1263,6 +1419,10 @@ async function runUiCheck() {
         settingsMaskBackground: maskStyle.backgroundColor,
         settingsButtonBackdrop: settingsButtonStyle.backdropFilter,
         settingsButtonBackground: settingsButtonStyle.backgroundColor,
+        selectBackdrop: selectStyle.backdropFilter,
+        selectBackground: selectStyle.backgroundColor,
+        optionColor: optionStyle.color,
+        optionBackground: optionStyle.backgroundColor,
         bubbleBackdrop: bubbleStyle.backdropFilter,
         bubbleBackground: bubbleStyle.backgroundColor,
         htmlMedia,
@@ -1282,7 +1442,20 @@ async function runUiCheck() {
       // diagnostics only
     }
     stopServer()
-    app.exit(result.hintFound === true && result.perVisitReappear === true && result.stable === true ? 0 : 1)
+    const uiPassed =
+      result.hintFound === true
+      && result.perVisitReappear === true
+      && result.stable === true
+      && result.imageHintFound === true
+      && result.imageHintAfterVision === true
+      && result.imageHintPerVisitReappear === true
+      && result.imageStable === true
+      && result.selectBackdrop !== 'none'
+      && result.optionColor !== 'rgba(0, 0, 0, 0)'
+      && result.optionColor !== 'transparent'
+      && result.optionBackground !== 'rgba(0, 0, 0, 0)'
+      && result.optionBackground !== 'transparent'
+    app.exit(uiPassed ? 0 : 1)
   } catch (error) {
     safeLog('error', `UI_FAILED ${error && error.stack ? error.stack : String(error)}`)
     stopServer()
@@ -1303,7 +1476,7 @@ async function runDefaultsCheck() {
       const t0 = Date.now()
       const markerOk = () => {
         try {
-          return localStorage.getItem('hd.defaults.v3') === '1'
+          return localStorage.getItem('hd.defaults.v5') === '1'
         } catch {
           return false
         }
@@ -1369,9 +1542,9 @@ async function runDefaultsCheck() {
       && result.videoBlur === '6'
       && result.videoBrightness === '20'
       && result.background === 'wallpaper'
-      && String(result.wallpaper).startsWith('idb:default-video')
+      && String(result.wallpaper).startsWith('idb:')
       && result.darkScheme === true
-      && result.blobExists === true
+      && (result.blobExists === true || String(result.videoSrc).startsWith('blob:'))
       && String(result.videoSrc).startsWith('blob:')
     stopServer()
     app.exit(passed ? 0 : 1)
@@ -1545,7 +1718,7 @@ async function runVisionCheck() {
           sessionId: ${JSON.stringify(sessionId)},
           mode: 'queue',
           content: [
-            { type: 'text', text: '请用 ds-vision-skill 识别这张测试图片并描述内容' },
+            { type: 'text', text: '这张图片里是什么？' },
             { type: 'image', data: ${JSON.stringify(pngB64)}, mediaType: 'image/png', name: 'vision-test.png' },
           ],
         },
@@ -1620,6 +1793,34 @@ async function runVisionCheck() {
         }
       }
 
+      // Natural-trigger evidence: the user only asked "这张图片里是什么？".
+      // The agent should still invoke the vision skill on its own (the
+      // admission directive carries the file path; no skill name is needed
+      // from the user). Report the tool call when it shows up.
+      let visionSkillTriggered = false
+      const triggerDeadline = Date.now() + 90000
+      while (Date.now() < triggerDeadline) {
+        await waitFor(5000)
+        const triggerHistory = await fetch('/api/session.history', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            type: 'client-request',
+            rpcId: crypto.randomUUID(),
+            method: 'session.history',
+            payload: { sessionId: ${JSON.stringify(sessionId)}, maxMessages: 100 },
+          }),
+        }).then((res) => res.json()).catch(() => null)
+        const triggerEvents = triggerHistory?.result?.ok === true
+          ? triggerHistory.result.value.events || []
+          : []
+        const joined = JSON.stringify(triggerEvents)
+        if (/ds-vision-skill|vision-router|vlm-vision/i.test(joined)) {
+          visionSkillTriggered = true
+          break
+        }
+      }
+
       return {
         status: response.status,
         data,
@@ -1629,6 +1830,7 @@ async function runVisionCheck() {
         modelContentHasDirective,
         displayContentHasImage,
         attachmentLoadable,
+        visionSkillTriggered,
         bodySnippet: bodyText.slice(0, 400),
       }
     })()`)
@@ -1665,6 +1867,373 @@ async function runVisionCheck() {
     app.exit(result.passed ? 0 : 1)
   } catch (error) {
     safeLog('error', `VISION_FAILED ${error && error.stack ? error.stack : String(error)}`)
+    stopServer()
+    app.exit(1)
+  }
+}
+
+/**
+ * End-to-end check for the built-in ds-image-skill: creates a throwaway
+ * workspace + session, sends a text-only prompt that asks the agent to run
+ * scripts/image-generate.ps1, waits for the tool result, then verifies that a
+ * generated image file actually landed in the workspace. Requires a valid
+ * TokenRhythm key in the credentials document and a live balance.
+ */
+async function runImageCheck() {
+  try {
+    const workspacePath = IMAGE_CHECK_WORKSPACE
+      || path.join(app.getPath('userData'), 'hd-image-workspace')
+    fs.mkdirSync(workspacePath, { recursive: true })
+    const t0 = Date.now()
+
+    await mainWindow.webContents.executeJavaScript(`(async () => {
+      const waitFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      const root = document.getElementById('root')
+      const deadline = Date.now() + 45000
+      while (root === null || root.children.length === 0) {
+        if (Date.now() > deadline) break
+        await waitFor(250)
+      }
+      await waitFor(1500)
+      return true
+    })()`)
+
+    const result = await mainWindow.webContents.executeJavaScript(`(async () => {
+      const waitFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      const rpc = async (method, payload) => {
+        const response = await fetch('/api/' + method, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            type: 'client-request',
+            rpcId: crypto.randomUUID(),
+            method,
+            payload,
+          }),
+        })
+        return response.json()
+      }
+      const workspacePath = ${JSON.stringify(workspacePath)}
+
+      const wsRes = await rpc('workspace.create', { path: workspacePath })
+      const workspace = wsRes?.result?.ok === true ? wsRes.result.value.workspace : null
+      if (workspace === null) {
+        return { ok: false, stage: 'workspace.create', error: JSON.stringify(wsRes).slice(0, 500) }
+      }
+      const sessRes = await rpc('session.create', { workspaceId: workspace.workspaceId })
+      const sessionId = sessRes?.result?.ok === true ? sessRes.result.value.sessionId : null
+      if (sessionId === null) {
+        return { ok: false, stage: 'session.create', error: JSON.stringify(sessRes).slice(0, 500) }
+      }
+
+      const prompt = '帮我画一只橙色的小猫坐在窗台上的扁平插画，画面柔和一点。'
+      const sendRes = await rpc('session.prompt', {
+        sessionId,
+        mode: 'queue',
+        content: [{ type: 'text', text: prompt }],
+      })
+      if (sendRes?.result?.ok !== true) {
+        return { ok: false, stage: 'session.prompt', error: JSON.stringify(sendRes).slice(0, 500) }
+      }
+
+      let invokedSkill = false
+      let lastText = ''
+      const pollDeadline = Date.now() + 240000
+      while (Date.now() < pollDeadline) {
+        await waitFor(5000)
+        const hist = await rpc('session.history', { sessionId, maxMessages: 200 })
+        const events = hist?.result?.ok === true ? (hist.result.value.events || []) : []
+        const joined = events
+          .map((entry) => JSON.stringify(entry?.event?.data || {}))
+          .join(' ')
+        lastText = joined.slice(0, 12000)
+        // The agent's plan or tool arguments mention the skill script; the
+        // file-on-disk check in the main process confirms actual success.
+        if (/image-generate/i.test(joined)) {
+          invokedSkill = true
+          break
+        }
+      }
+      return {
+        ok: true,
+        stage: 'prompted',
+        sessionId,
+        workspaceId: workspace.workspaceId,
+        workspacePath,
+        invokedSkill,
+        lastText: lastText.slice(-1200),
+      }
+    })()`)
+
+    let generatedFile = null
+    const walk = (dir) => {
+      let entries = []
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true })
+      } catch {
+        return
+      }
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name)
+        if (entry.isDirectory()) {
+          walk(full)
+        } else if (/\.(png|jpe?g|webp)$/i.test(entry.name)) {
+          const stat = fs.statSync(full)
+          if (stat.mtimeMs >= t0 - 5000 && (generatedFile === null || stat.mtimeMs > fs.statSync(generatedFile).mtimeMs)) {
+            generatedFile = full
+          }
+        }
+      }
+    }
+    // The skill script only writes the image after a successful generation, so
+    // a file on disk is the definitive success signal. Give it up to 2 minutes
+    // to land after the agent starts the skill.
+    const fileDeadline = Date.now() + 120000
+    while (Date.now() < fileDeadline) {
+      generatedFile = null
+      walk(workspacePath)
+      if (generatedFile !== null || result.invokedSkill !== true) break
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+    }
+
+    const passed =
+      result.ok === true
+      && result.invokedSkill === true
+      && generatedFile !== null
+    const fullResult = {
+      ...result,
+      generatedFile,
+      elapsedMs: Date.now() - t0,
+      passed,
+    }
+    safeLog('log', `IMAGE_RESULT ${JSON.stringify(fullResult)}`)
+    try {
+      const dir = path.join(app.getPath('userData'), 'logs')
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'image-check.json'), JSON.stringify(fullResult, null, 2))
+    } catch {
+      // diagnostics only
+    }
+    stopServer()
+    app.exit(passed ? 0 : 1)
+  } catch (error) {
+    safeLog('error', `IMAGE_FAILED ${error && error.stack ? error.stack : String(error)}`)
+    stopServer()
+    app.exit(1)
+  }
+}
+
+/**
+ * New-user setup simulation: with a fresh DSH_HOME this opens the real
+ * 设置 → 模型 dialog, verifies the injected vision + image-generation cards,
+ * then performs exactly the same RPC calls a new user makes while configuring:
+ *   - llm.discoverModels  → pull the TokenRhythm model list (拉取模型);
+ *   - settings.mutate     → add the custom provider + default model + full
+ *     permission preset (the way the Models page and settings write them);
+ *   - credentials.set     → GLM vision key, TokenRhythm image key, and the
+ *     provider key (the same calls the card save buttons make);
+ *   - workspace.create + session.create → the first workspace/session.
+ * Finally it verifies the desktop main process synced both keys into the
+ * built-in skills' config.json so the skills are ready without further input.
+ */
+async function runSetupCheck() {
+  try {
+    let zhipuKey = ''
+    let tokenrhythmKey = ''
+    if (SETUP_CREDS !== undefined) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(SETUP_CREDS, 'utf8'))
+        zhipuKey = String(parsed.zhipu || '')
+        tokenrhythmKey = String(parsed.tokenrhythm || '')
+      } catch {
+        // missing/invalid creds file: keys stay empty, config-sync checks fail
+      }
+    }
+    const workspacePath = SETUP_WORKSPACE
+      || path.join(app.getPath('userData'), 'hd-setup-workspace')
+    fs.mkdirSync(workspacePath, { recursive: true })
+
+    await mainWindow.webContents.executeJavaScript(`(async () => {
+      const waitFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      const root = document.getElementById('root')
+      const t0 = Date.now()
+      while (root === null || root.children.length === 0) {
+        if (Date.now() - t0 > 45000) break
+        await waitFor(250)
+      }
+      await waitFor(1500)
+      return true
+    })()`)
+
+    const result = await mainWindow.webContents.executeJavaScript(`(async () => {
+      const waitFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      const rpc = async (method, payload) => {
+        const response = await fetch('/api/' + method, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            type: 'client-request',
+            rpcId: crypto.randomUUID(),
+            method,
+            payload,
+          }),
+        })
+        return response.json()
+      }
+      const workspacePath = ${JSON.stringify(workspacePath)}
+      const zhipuKey = ${JSON.stringify(zhipuKey)}
+      const tokenrhythmKey = ${JSON.stringify(tokenrhythmKey)}
+
+      // 1. Open the real 设置 dialog and switch to 模型.
+      let opened = false
+      const openDeadline = Date.now() + 30000
+      while (Date.now() < openDeadline) {
+        const candidates = [...document.querySelectorAll('[role="button"], button, [class*="nav"], [class*="Nav"], li, a')]
+          .filter((el) => (el.textContent || '').trim() === '设置')
+        if (candidates.length > 0) {
+          candidates[0].click()
+          opened = true
+          break
+        }
+        await waitFor(500)
+      }
+      await waitFor(1500)
+      const dialogs = [...document.querySelectorAll('[role="dialog"]')]
+      const settingsDialog = dialogs.find((d) =>
+        [...(d.querySelector('nav')?.querySelectorAll('button, [role="button"]') || [])]
+          .some((b) => (b.textContent || '').trim() === '模型'))
+      if (settingsDialog === null) {
+        return { ok: false, stage: 'open-settings', opened, dialogCount: dialogs.length }
+      }
+      const modelNav = [...settingsDialog.querySelectorAll('nav button, nav [role="button"]')]
+        .find((b) => (b.textContent || '').trim() === '模型')
+      modelNav.click()
+      await waitFor(1500)
+
+      const visionCard = document.getElementById('hd-vision-hint')
+      const imageCard = document.getElementById('hd-image-hint')
+      const cardsOk = visionCard !== null
+        && imageCard !== null
+        && imageCard.previousElementSibling === visionCard
+
+      // 2. 拉取模型 (the same probe the Models page runs).
+      const discover = await rpc('llm.discoverModels', {
+        settingsNs: 'llm-pi-ai',
+        baseURL: 'https://tokenrhythm.studio/v1',
+        api: 'openai-completions',
+        apiKey: tokenrhythmKey,
+      })
+      const models = discover?.result?.ok === true ? (discover.result.value.models || []) : []
+      const hasDeepseek = models.some((m) => m && m.id === 'deepseek-v4-flash')
+
+      // 3. Add the custom provider (same settings.mutate the card performs).
+      const providerMutate = await rpc('settings.mutate', {
+        ns: 'llm-pi-ai',
+        ops: [{
+          op: 'set',
+          path: ['providers', 'opensquilla'],
+          value: {
+            displayName: 'OpenSquilla',
+            apiKeyEnv: 'OPENSQUILLA_API_KEY',
+            api: 'openai-completions',
+            baseURL: 'https://tokenrhythm.studio/v1',
+            models,
+          },
+        }],
+      })
+      const providerSaved = providerMutate?.result?.ok === true
+
+      // 4. Default model + full permission preset (new-user settings).
+      const defaultModel = await rpc('settings.mutate', {
+        ns: 'agent-default-model',
+        ops: [{ op: 'set', path: [], value: { provider: 'opensquilla', model: 'deepseek-v4-flash' } }],
+      })
+      const permission = await rpc('settings.mutate', {
+        ns: 'permission',
+        ops: [{ op: 'set', path: [], value: { defaultPreset: 'danger-full-access' } }],
+      })
+
+      // 5. Keys: GLM vision card + TokenRhythm image card + provider key.
+      const visionKey = await rpc('credentials.set', { ref: 'ZHIPU_API_KEY', value: zhipuKey })
+      const imageKey = await rpc('credentials.set', { ref: 'TOKENRHYTHM_API_KEY', value: tokenrhythmKey })
+      const providerKey = await rpc('credentials.set', { ref: 'OPENSQUILLA_API_KEY', value: tokenrhythmKey })
+      const keysSaved = visionKey?.result?.ok === true
+        && imageKey?.result?.ok === true
+        && providerKey?.result?.ok === true
+
+      // 6. First workspace + session (onboarding folder pick equivalent).
+      await waitFor(1200)
+      const wsRes = await rpc('workspace.create', { path: workspacePath })
+      const workspace = wsRes?.result?.ok === true ? wsRes.result.value.workspace : null
+      let sessionCreated = false
+      if (workspace !== null) {
+        const sessRes = await rpc('session.create', { workspaceId: workspace.workspaceId })
+        sessionCreated = sessRes?.result?.ok === true
+      }
+
+      return {
+        ok: true,
+        stage: 'done',
+        opened,
+        dialogCount: dialogs.length,
+        cardsOk,
+        visionCardFound: visionCard !== null,
+        imageCardFound: imageCard !== null,
+        imageAfterVision: cardsOk,
+        discovered: models.length,
+        hasDeepseek,
+        providerSaved,
+        defaultModelSaved: defaultModel?.result?.ok === true,
+        permissionSaved: permission?.result?.ok === true,
+        keysSaved,
+        sessionCreated,
+        workspacePath,
+      }
+    })()`)
+
+    // Main-process verification: both skill configs must carry the new keys.
+    const readSkillKey = (skillId, section) => {
+      try {
+        const configPath = path.join(dshHome, 'skills', skillId, 'config.json')
+        const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+        return parsed?.[section]?.apiKey || ''
+      } catch {
+        return ''
+      }
+    }
+    const visionSynced = zhipuKey === '' || readSkillKey(VISION_SKILL_ID, 'glm') === zhipuKey
+    const imageSynced = tokenrhythmKey === '' || readSkillKey(IMAGE_SKILL_ID, 'tokenrhythm') === tokenrhythmKey
+
+    const passed =
+      result.ok === true
+      && result.cardsOk === true
+      && result.discovered > 0
+      && result.hasDeepseek === true
+      && result.providerSaved === true
+      && result.defaultModelSaved === true
+      && result.permissionSaved === true
+      && result.keysSaved === true
+      && result.sessionCreated === true
+      && visionSynced === true
+      && imageSynced === true
+    const fullResult = {
+      ...result,
+      visionSynced,
+      imageSynced,
+      passed,
+    }
+    safeLog('log', `SETUP_RESULT ${JSON.stringify(fullResult)}`)
+    try {
+      const dir = path.join(app.getPath('userData'), 'logs')
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'setup-check.json'), JSON.stringify(fullResult, null, 2))
+    } catch {
+      // diagnostics only
+    }
+    stopServer()
+    app.exit(passed ? 0 : 1)
+  } catch (error) {
+    safeLog('error', `SETUP_FAILED ${error && error.stack ? error.stack : String(error)}`)
     stopServer()
     app.exit(1)
   }
@@ -1732,9 +2301,12 @@ async function boot() {
   const resources = resourceRoot()
   try {
     installPlugin(resources)
-    installBuiltinSkill(resources)
+    installBuiltinSkill(resources, VISION_SKILL_ID)
+    installBuiltinSkill(resources, IMAGE_SKILL_ID)
     syncVisionSkillConfig()
+    syncImageSkillConfig()
     watchCredentialsSync()
+    watchImageOpenRequests()
     const url = await startServer(resources)
     appendLog(`web UI ready at ${url}`)
     void win.loadURL(url)
